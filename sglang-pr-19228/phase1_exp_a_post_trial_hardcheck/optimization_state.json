@@ -1,0 +1,30 @@
+{
+  "job_name": "sglang-kimi-moe-tune",
+  "repo": "https://github.com/sgl-project/sglang.git",
+  "initial_baseline_ms": 74.4,
+  "current_best_ms": 74.4,
+  "stages_completed": [
+    {
+      "stage": "stage1_diagnose_and_infra",
+      "baseline_ms": null,
+      "current_best_ms": 74.4,
+      "applied_optimizations": [],
+      "attempted_but_failed": [],
+      "profiling_summary": {
+        "top_bottlenecks": [],
+        "gpu_utilization": 0.0,
+        "memory_usage_gb": 0.0,
+        "kernel_breakdown": {},
+        "raw_profile_path": "",
+        "timestamp": ""
+      },
+      "environment_changes": [],
+      "notes": [],
+      "started_at": "2026-03-09T21:35:08.740142",
+      "completed_at": "2026-03-09T22:35:32.094130"
+    }
+  ],
+  "current_stage": null,
+  "technique_attempts": {},
+  "global_notes": []
+}

@@ -1,0 +1,37 @@
+[22:57:42] INFO __main__: ============================================================
+[22:57:42] INFO __main__: amdpilot orchestrator
+[22:57:42] INFO __main__: Job: sglang-kimi-moe-tune  Type: optimize  Supervisor: on  Nudge: on  GPU: 0,1,2,3,4,5,6,7
+[22:57:42] INFO __main__: Max runtime: 1h
+[22:57:42] INFO __main__: ============================================================
+[22:57:42] INFO __main__: Model endpoint: http://10.235.27.218:30000/v1  Model: qwen-3.5  GPU: 0,1,2,3,4,5,6,7
+[22:57:42] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_kimi_moe_tune started from amdpilot-eval-sglang-kimi-moe-tune
+[22:57:42] INFO __main__: === stage1_diagnose_and_infra, Trial 1 (timeout=3600s) ===
+[22:57:43] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_kimi_moe_tune started from amdpilot-eval-sglang-kimi-moe-tune
+[22:57:43] INFO __main__: Test harness hash captured: f9429fc514a1
+[22:57:44] INFO __main__: GPU: 8 GPU(s): AMD Instinct MI355X
+[22:57:44] INFO __main__: Setting up kimi-cli in container...
+[23:00:45] INFO __main__: Launching kimi-cli (ralph mode, timeout=3600s)
+[23:22:45] INFO amdpilot.orchestrator.execution_monitor: Wrote nudge [urgent] #1: STOP and profile FIRST. Run this exact command now:
+
+rocprof --stats /opt/venv/b
+[23:22:59] INFO amdpilot.orchestrator.execution_monitor: Nudge agent response: NUDGE: You've spent 25 minutes without a single benchmark run (`cd /workspace/sglang && /opt/venv/bin/python3 /workspace
+[23:22:59] INFO amdpilot.orchestrator.execution_monitor: Wrote nudge [suggestion] #2: You've spent 25 minutes without a single benchmark run (`cd /workspace/sglang &&
+[23:49:51] INFO __main__: Agent finished in 3127s
+[23:49:52] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[23:49:52] INFO __main__: No metric from agent output; running fallback benchmark...
+[23:49:52] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: cd /workspace/sglang && /opt/venv/bin/python3 /workspace/test_harness.py
+[23:49:59] INFO __main__: Fallback benchmark recovered metric: 73.40
+[23:49:59] INFO __main__: Trial 1 result: score=73.40, elapsed=3127s
+[23:49:59] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=1 stage=stage1_diagnose_and_infra metric=73.40
+[23:49:59] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: cd /workspace/sglang && /opt/venv/bin/python3 /workspace/test_harness.py
+[23:50:26] INFO amdpilot.orchestrator.docker_manager: Committed container -> sglang-kimi-moe-tune:stage1_diagnose_and_infra
+[23:50:45] INFO amdpilot.orchestrator.docker_manager: Committed container -> sglang-kimi-moe-tune:best
+[23:50:45] INFO __main__: Best checkpoint updated: none -> 70.40  image=sglang-kimi-moe-tune:best
+[23:50:45] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 1 (Claude, direct API)...
+[23:50:49] INFO amdpilot.orchestrator.supervisor: Supervisor raw response: {"action":"stop","hints":"","analysis":"Only ~6 minutes remaining. Not enough time for another trial. Best score achieved is 73.40 with tuned MoE kernel configs for E=384, N=128, int4_w4a16."}
+[23:50:49] INFO amdpilot.orchestrator.supervisor: Supervisor decision: stop — Only ~6 minutes remaining. Not enough time for another trial. Best score achieved is 73.40 with tune
+[23:50:49] INFO __main__: Supervisor: STOP — Only ~6 minutes remaining. Not enough time for another trial. Best score achieved is 73.40 with tuned MoE kernel configs for E=384, N=128, int4_w4a16.
+[23:50:49] INFO __main__: 
+[23:50:49] INFO __main__: ============================================================
+[23:50:49] INFO __main__: Orchestrator Complete — Best: 73.40 score (3186s)
+[23:50:49] INFO __main__: ============================================================

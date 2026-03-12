@@ -1,0 +1,104 @@
+[03:15:59] INFO __main__: ============================================================
+[03:15:59] INFO __main__: amdpilot orchestrator
+[03:15:59] INFO __main__: Job: sglang-kimi-moe-tune  Type: optimize  Supervisor: on  Nudge: on  GPU: 0,1,2,3,4,5,6,7
+[03:15:59] INFO __main__: Base image: amdpilot-eval-sglang-kimi-moe-tune
+[03:15:59] INFO __main__: Max runtime: 8h
+[03:15:59] INFO __main__: ============================================================
+[03:15:59] INFO __main__: Model endpoint: http://10.235.27.218:30000/v1  Model: qwen-3.5  GPU: 0,1,2,3,4,5,6,7
+[03:15:59] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_kimi_moe_tune started from amdpilot-eval-sglang-kimi-moe-tune
+[03:15:59] INFO __main__: === stage1_diagnose_and_infra, Trial 1 (timeout=5400s) ===
+[03:15:59] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_kimi_moe_tune started from amdpilot-eval-sglang-kimi-moe-tune
+[03:15:59] INFO __main__: Test harness hash captured: f9429fc514a1
+[03:16:01] INFO __main__: GPU: 8 GPU(s): AMD Instinct MI355X
+[03:16:01] INFO __main__: Setting up kimi-cli in container...
+[03:22:07] INFO __main__: Launching kimi-cli (ralph mode, timeout=5400s)
+[03:24:40] INFO __main__: Agent finished in 519s
+[03:24:40] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[03:24:40] INFO __main__: No metric from agent output; running fallback benchmark...
+[03:24:40] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: cd /workspace/sglang && /opt/venv/bin/python3 /workspace/test_harness.py
+[03:24:41] INFO __main__: Fallback benchmark recovered metric: 2.00
+[03:24:41] INFO __main__: Trial 1 result: score=2.00, elapsed=519s
+[03:24:41] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=1 stage=stage1_diagnose_and_infra metric=2.00
+[03:24:41] WARNING __main__: No profiling evidence in trial 1, injecting commands
+[03:24:41] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: cd /workspace/sglang && /opt/venv/bin/python3 /workspace/test_harness.py
+[03:24:49] INFO amdpilot.orchestrator.docker_manager: Committed container -> sglang-kimi-moe-tune:stage1_diagnose_and_infra
+[03:24:56] INFO amdpilot.orchestrator.docker_manager: Committed container -> sglang-kimi-moe-tune:best
+[03:24:56] INFO __main__: Best checkpoint updated: none -> 2.00  image=sglang-kimi-moe-tune:best
+[03:24:56] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 1 (Claude, direct API)...
+[03:25:13] INFO amdpilot.orchestrator.supervisor: Supervisor raw response: ```json
+{
+  "action": "retry_with_hints",
+  "hints": "The previous trial wasted all time trying to install unrelated packages (kimi-cli/pykaos). Do NOT install any packages. The environment is already
+[03:25:13] INFO amdpilot.orchestrator.supervisor: Supervisor decision: retry_with_hints — Trial 1 completely wasted on trying to install unrelated packages (kimi-cli/pykaos) which failed due
+[03:25:13] INFO __main__: Supervisor: RETRY — Trial 1 completely wasted on trying to install unrelated packages (kimi-cli/pykaos) which failed due to network timeouts. The agent never read the task description or attempted any MoE config tuning. Score remained at baseline 2.00.
+[03:25:13] INFO __main__: Rolling back to best checkpoint (2.00)
+[03:25:13] INFO __main__: === stage1_diagnose_and_infra, Trial 2 (timeout=5400s) ===
+[03:25:13] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_kimi_moe_tune started from sglang-kimi-moe-tune:best
+[03:25:13] INFO __main__: Test harness hash captured: f9429fc514a1
+[03:25:15] INFO __main__: GPU: 8 GPU(s): AMD Instinct MI355X
+[03:25:15] INFO __main__: Launching kimi-cli (ralph mode, timeout=5400s)
+[03:46:38] INFO amdpilot.orchestrator.execution_monitor: Wrote nudge #1: STOP and profile FIRST. Run this exact command now:
+
+rocprof --stats /opt/venv/b
+[03:46:43] INFO amdpilot.orchestrator.execution_monitor: Nudge agent response: NOOP
+[04:12:36] INFO __main__: Agent finished in 2841s
+[04:12:36] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[04:12:36] INFO __main__: No metric from agent output; running fallback benchmark...
+[04:12:36] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: cd /workspace/sglang && /opt/venv/bin/python3 /workspace/test_harness.py
+[04:12:44] INFO __main__: Fallback benchmark recovered metric: 63.10
+[04:12:44] INFO __main__: Trial 2 result: score=63.10, elapsed=2841s
+[04:12:44] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=2 stage=stage1_diagnose_and_infra metric=63.10
+[04:12:44] WARNING __main__: No profiling evidence in trial 2, injecting commands
+[04:12:44] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: cd /workspace/sglang && /opt/venv/bin/python3 /workspace/test_harness.py
+[04:13:05] INFO amdpilot.orchestrator.docker_manager: Committed container -> sglang-kimi-moe-tune:stage1_diagnose_and_infra
+[04:13:18] INFO amdpilot.orchestrator.docker_manager: Committed container -> sglang-kimi-moe-tune:best
+[04:13:18] INFO __main__: Best checkpoint updated: 2.00 -> 58.00  image=sglang-kimi-moe-tune:best
+[04:13:18] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 2 (Claude, direct API)...
+[04:13:34] INFO amdpilot.orchestrator.supervisor: Supervisor raw response: {"action":"continue","hints":"Stage 1 target exceeded. The best score so far is 63.10. When advancing to the next stages, focus on expanding the Triton config search space to push the geometric mean s
+[04:13:34] INFO amdpilot.orchestrator.supervisor: Supervisor decision: continue — Trial 2 achieved 63.10, well above stage 1 target of 25.0 and also above stage 2 target of 50.0. The
+[04:13:34] INFO __main__: stage1_diagnose_and_infra target HIT (58.00)
+[04:13:34] INFO __main__: === stage2_systematic_tuning, Trial 3 (timeout=5400s) ===
+[04:13:35] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_kimi_moe_tune started from sglang-kimi-moe-tune:stage1_diagnose_and_infra
+[04:13:35] INFO __main__: Test harness hash captured: f9429fc514a1
+[04:13:36] INFO __main__: GPU: 8 GPU(s): AMD Instinct MI355X
+[04:13:36] INFO __main__: Launching kimi-cli (ralph mode, timeout=5400s)
+[04:13:49] INFO amdpilot.orchestrator.execution_monitor: Nudge agent response: NOOP
+[04:26:22] INFO __main__: Agent finished in 765s
+[04:26:22] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[04:26:22] INFO __main__: Trial 3 result: score=58.00, elapsed=765s
+[04:26:22] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=3 stage=stage2_systematic_tuning metric=58.00
+[04:26:22] WARNING __main__: No profiling evidence in trial 3, injecting commands
+[04:26:22] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: cd /workspace/sglang && /opt/venv/bin/python3 /workspace/test_harness.py
+[04:26:30] INFO amdpilot.orchestrator.docker_manager: Committed container -> sglang-kimi-moe-tune:stage2_systematic_tuning
+[04:26:30] INFO amdpilot.orchestrator.docker_manager: Committed container -> sglang-kimi-moe-tune:best
+[04:26:30] INFO __main__: Best checkpoint updated: 58.00 -> 58.30  image=sglang-kimi-moe-tune:best
+[04:26:30] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 3 (Claude, direct API)...
+[04:26:47] INFO amdpilot.orchestrator.supervisor: Supervisor raw response: ```json
+{
+  "action": "continue",
+  "hints": "Stage 2 target hit. The best score was 63.10 from trial 2 — the orchestrator will roll back to that checkpoint. For stage 3, focus on improving Tier 3 (ke
+[04:26:47] INFO amdpilot.orchestrator.supervisor: Supervisor decision: continue — Stage 2 target of 50.0 was hit with score 58.30 (best overall 63.10 from trial 2). Advancing to stag
+[04:26:47] INFO __main__: stage2_systematic_tuning target HIT (58.30)
+[04:26:47] INFO __main__: === stage3_optimize_further, Trial 4 (timeout=5400s) ===
+[04:26:47] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_kimi_moe_tune started from sglang-kimi-moe-tune:stage2_systematic_tuning
+[04:26:48] INFO __main__: Test harness hash captured: f9429fc514a1
+[04:26:49] INFO __main__: GPU: 8 GPU(s): AMD Instinct MI355X
+[04:26:49] INFO __main__: Launching kimi-cli (ralph mode, timeout=5400s)
+[04:27:06] INFO amdpilot.orchestrator.execution_monitor: Nudge agent response: NOOP
+[05:16:30] INFO __main__: Agent finished in 2980s
+[05:16:30] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[05:16:30] INFO __main__: Trial 4 result: score=74.80, elapsed=2980s
+[05:16:30] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=4 stage=stage3_optimize_further metric=74.80
+[05:16:30] WARNING __main__: No profiling evidence in trial 4, injecting commands
+[05:16:30] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: cd /workspace/sglang && /opt/venv/bin/python3 /workspace/test_harness.py
+[05:16:44] INFO amdpilot.orchestrator.docker_manager: Committed container -> sglang-kimi-moe-tune:stage3_optimize_further
+[05:16:51] INFO amdpilot.orchestrator.docker_manager: Committed container -> sglang-kimi-moe-tune:best
+[05:16:51] INFO __main__: Best checkpoint updated: 58.30 -> 73.20  image=sglang-kimi-moe-tune:best
+[05:16:51] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 4 (Claude, direct API)...
+[05:16:59] INFO amdpilot.orchestrator.supervisor: Supervisor raw response: {"action":"stop","hints":"","analysis":"Pipeline complete. Starting from a baseline score of 2.0, the agent systematically tuned fused_moe_triton kernel configs for the Kimi K2.5 model on AMD MI355X, 
+[05:16:59] INFO amdpilot.orchestrator.supervisor: Supervisor decision: stop — Pipeline complete. Starting from a baseline score of 2.0, the agent systematically tuned fused_moe_t
+[05:16:59] INFO __main__: Supervisor: FINISH — Pipeline complete. Starting from a baseline score of 2.0, the agent systematically tuned fused_moe_triton kernel configs for the Kimi K2.5 model on AMD MI355X, achieving a best score of 74.80 (target: 70.0). Key accomplishments: added int4_w4a16 support to the tuning infrastructure, performed systematic config search across batch sizes 512-16384, found optimal BLOCK_SIZE/num_warps/num_stages parameters per batch size, and deployed configs to both triton_3_5_1 and triton_3_6_0 directories, yielding ~1.5x geometric mean speedup.
+[05:16:59] INFO __main__: 
+[05:16:59] INFO __main__: ============================================================
+[05:16:59] INFO __main__: Orchestrator Complete — Best: 74.80 score (7260s)
+[05:16:59] INFO __main__: ============================================================

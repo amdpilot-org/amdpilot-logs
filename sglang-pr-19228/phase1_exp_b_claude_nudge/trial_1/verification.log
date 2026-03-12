@@ -1,0 +1,26 @@
+[PASS] claimed=73.40ms actual=70.40ms -- Verified: actual=70.40 vs claimed=73.40 (deviation -4.1%, direction=higher)
+
+8192: default=    2943.8us, tuned=    1600.6us, speedup=1.839x (tpe=171)
+  M=16384: default=    5683.7us, tuned=    3145.9us, speedup=1.807x (tpe=341)
+
+  Geometric mean speedup: 1.504x
+  Tier 3 score: 50.4/80
+  (1.0x=0pts, 1.5x=50pts, 1.8x=80pts)
+
+============================================================
+  Tier 1 (Config files):       10.0 / 10
+  Tier 2 (Infrastructure):     10.0 / 10
+  Tier 3 (Kernel benchmark):   50.4 / 80
+  ─────────────────────────────────────
+  Total:                       70.4 / 100
+
+SCORE: 70.4
+
+[aiter] import [module_aiter_enum] under /sgl-workspace/aiter/aiter/jit/module_aiter_enum.so
+[2026-03-10 03:50:03] INFO core.py:501: import [module_aiter_enum] under /sgl-workspace/aiter/aiter/jit/module_aiter_enum.so
+[2026-03-10 03:50:05] WARNING fused_moe_triton_config.py:128: Using default MoE kernel config. Performance might be sub-optimal! Config file not found at /workspace/sglang/python/sglang/srt/layers/moe/fused_moe_triton/configs/triton_3_6_0/E=384,N=256,device_name=AMD_Instinct_MI355X.json, you can create them with https://github.com/sgl-project/sglang/tree/main/benchmark/kernels/fused_moe_triton
+[2026-03-10 03:50:05] WARNING fused_moe_triton_config.py:120: Using MoE kernel config with down_moe=False. Performance might be sub-optimal! Config file not found at /workspace/sglang/python/sglang/srt/layers/moe/fused_moe_triton/configs/triton_3_6_0/E=384,N=256,device_name=AMD_Instinct_MI355X_down.json, you can create them with https://github.com/sgl-project/sglang/tree/main/benchmark/kernels/fused_moe_triton
+[aiter] import [module_moe_asm] under /sgl-workspace/aiter/aiter/jit/module_moe_asm.so
+[2026-03-10 03:50:05] INFO core.py:501: import [module_moe_asm] under /sgl-workspace/aiter/aiter/jit/module_moe_asm.so
+[aiter] type hints mismatch, override to --> moe_sum(arg0: torch.Tensor, arg1: torch.Tensor) -> None
+[2026-03-10 03:50:05] WARNING core.py:953: type hints mismatch, override to --> moe_sum(arg0: torch.Tensor, arg1: torch.Tensor) -> None

@@ -1,0 +1,120 @@
+{
+  "job_name": "sglang-kimi-moe-tune",
+  "repo": "https://github.com/sgl-project/sglang.git",
+  "initial_baseline_ms": 2.0,
+  "current_best_ms": 73.2,
+  "stages_completed": [
+    {
+      "stage": "stage1_diagnose_and_infra",
+      "baseline_ms": null,
+      "current_best_ms": 2.0,
+      "applied_optimizations": [],
+      "attempted_but_failed": [],
+      "profiling_summary": {
+        "top_bottlenecks": [],
+        "gpu_utilization": 0.0,
+        "memory_usage_gb": 0.0,
+        "kernel_breakdown": {},
+        "raw_profile_path": "",
+        "timestamp": ""
+      },
+      "environment_changes": [],
+      "notes": [],
+      "started_at": "2026-03-10T03:15:59.538530",
+      "completed_at": "2026-03-10T03:24:42.727671"
+    },
+    {
+      "stage": "stage1_diagnose_and_infra",
+      "baseline_ms": 2.0,
+      "current_best_ms": 58.0,
+      "applied_optimizations": [
+        {
+          "name": "Added int4_w4a16 support to tuning infrastructure",
+          "impact_ms": 0,
+          "files_changed": [
+            "/workspace/sglang/benchmark/kernels/fused_moe_triton/common_utils.py",
+            "/workspace/sglang/benchmark/kernels/fused_moe_triton/tuning_fused_moe_triton.py"
+          ],
+          "description": "Added use_int4_w4a16 parameter support to benchmark_config, BenchmarkWorker.benchmark, BenchmarkWorker.tune, and get_config_filename functions. Added int4_w4a16 to dtype choices. Added uint8 packed int4 tensor creation for benchmarking.",
+          "technique_category": "",
+          "timestamp": ""
+        },
+        {
+          "name": "Created tuned config files for E=384, N=128, int4_w4a16",
+          "impact_ms": -1500,
+          "files_changed": [
+            "/workspace/sglang/python/sglang/srt/layers/moe/fused_moe_triton/configs/triton_3_5_1/E=384,N=128,device_name=,dtype=int4_w4a16.json",
+            "/workspace/sglang/python/sglang/srt/layers/moe/fused_moe_triton/configs/triton_3_5_1/E=384,N=128,device_name=,dtype=int4_w4a16_down.json"
+          ],
+          "description": "Generated tuned MoE kernel configs through systematic benchmark of 66 configurations across 5 batch sizes (512, 2048, 4096, 8192, 16384). Achieved 1.418x geometric mean speedup over default config.",
+          "technique_category": "",
+          "timestamp": ""
+        },
+        {
+          "name": "Added KimiK25ForConditionalGeneration architecture support",
+          "impact_ms": 0,
+          "files_changed": [
+            "/workspace/sglang/benchmark/kernels/fused_moe_triton/common_utils.py"
+          ],
+          "description": "Added KimiK25ForConditionalGeneration to the list of architectures in get_model_config for proper E, topk, and intermediate_size extraction.",
+          "technique_category": "",
+          "timestamp": ""
+        }
+      ],
+      "attempted_but_failed": [],
+      "profiling_summary": {
+        "top_bottlenecks": [],
+        "gpu_utilization": 0.0,
+        "memory_usage_gb": 0.0,
+        "kernel_breakdown": {},
+        "raw_profile_path": "",
+        "timestamp": ""
+      },
+      "environment_changes": [],
+      "notes": [],
+      "started_at": "2026-03-10T03:25:13.076716",
+      "completed_at": "2026-03-10T04:12:51.955920"
+    },
+    {
+      "stage": "stage2_systematic_tuning",
+      "baseline_ms": 58.0,
+      "current_best_ms": 58.3,
+      "applied_optimizations": [],
+      "attempted_but_failed": [],
+      "profiling_summary": {
+        "top_bottlenecks": [],
+        "gpu_utilization": 0.0,
+        "memory_usage_gb": 0.0,
+        "kernel_breakdown": {},
+        "raw_profile_path": "",
+        "timestamp": ""
+      },
+      "environment_changes": [],
+      "notes": [],
+      "started_at": "2026-03-10T04:13:34.581868",
+      "completed_at": "2026-03-10T04:26:30.140505"
+    },
+    {
+      "stage": "stage3_optimize_further",
+      "baseline_ms": 58.3,
+      "current_best_ms": 73.2,
+      "applied_optimizations": [],
+      "attempted_but_failed": [],
+      "profiling_summary": {
+        "top_bottlenecks": [],
+        "gpu_utilization": 0.0,
+        "memory_usage_gb": 0.0,
+        "kernel_breakdown": {},
+        "raw_profile_path": "",
+        "timestamp": ""
+      },
+      "environment_changes": [],
+      "notes": [],
+      "started_at": "2026-03-10T04:26:47.718294",
+      "completed_at": "2026-03-10T05:16:37.783397"
+    }
+  ],
+  "current_stage": null,
+  "technique_attempts": {},
+  "global_notes": []
+}

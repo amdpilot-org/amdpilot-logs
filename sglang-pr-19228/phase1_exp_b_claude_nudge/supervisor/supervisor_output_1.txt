@@ -1,0 +1,1 @@
+{"action":"stop","hints":"","analysis":"Only ~6 minutes remaining. Not enough time for another trial. Best score achieved is 73.40 with tuned MoE kernel configs for E=384, N=128, int4_w4a16."}

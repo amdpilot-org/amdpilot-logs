@@ -1,0 +1,87 @@
+{
+  "job_name": "sglang-kimi-moe-tune",
+  "repo": "https://github.com/sgl-project/sglang.git",
+  "initial_baseline_ms": 61.6,
+  "current_best_ms": 98.7,
+  "stages_completed": [
+    {
+      "stage": "stage1_profile_and_infra",
+      "baseline_ms": null,
+      "current_best_ms": 61.6,
+      "applied_optimizations": [],
+      "attempted_but_failed": [],
+      "profiling_summary": {
+        "top_bottlenecks": [],
+        "gpu_utilization": 0.0,
+        "memory_usage_gb": 0.0,
+        "kernel_breakdown": {},
+        "raw_profile_path": "",
+        "timestamp": ""
+      },
+      "environment_changes": [],
+      "notes": [],
+      "started_at": "2026-03-12T02:02:41.359278",
+      "completed_at": "2026-03-12T02:15:55.087509"
+    },
+    {
+      "stage": "stage2_systematic_tuning",
+      "baseline_ms": 61.6,
+      "current_best_ms": 73.3,
+      "applied_optimizations": [],
+      "attempted_but_failed": [],
+      "profiling_summary": {
+        "top_bottlenecks": [],
+        "gpu_utilization": 0.0,
+        "memory_usage_gb": 0.0,
+        "kernel_breakdown": {},
+        "raw_profile_path": "",
+        "timestamp": ""
+      },
+      "environment_changes": [],
+      "notes": [],
+      "started_at": "2026-03-12T02:16:33.172245",
+      "completed_at": "2026-03-12T02:30:53.932596"
+    },
+    {
+      "stage": "stage3_small_batch_optimization",
+      "baseline_ms": 73.3,
+      "current_best_ms": 76.0,
+      "applied_optimizations": [],
+      "attempted_but_failed": [],
+      "profiling_summary": {
+        "top_bottlenecks": [],
+        "gpu_utilization": 0.0,
+        "memory_usage_gb": 0.0,
+        "kernel_breakdown": {},
+        "raw_profile_path": "",
+        "timestamp": ""
+      },
+      "environment_changes": [],
+      "notes": [],
+      "started_at": "2026-03-12T02:31:06.654240",
+      "completed_at": "2026-03-12T03:10:49.880182"
+    },
+    {
+      "stage": "stage3_small_batch_optimization",
+      "baseline_ms": 76.0,
+      "current_best_ms": 98.7,
+      "applied_optimizations": [],
+      "attempted_but_failed": [],
+      "profiling_summary": {
+        "top_bottlenecks": [],
+        "gpu_utilization": 0.0,
+        "memory_usage_gb": 0.0,
+        "kernel_breakdown": {},
+        "raw_profile_path": "",
+        "timestamp": ""
+      },
+      "environment_changes": [],
+      "notes": [],
+      "started_at": "2026-03-12T03:11:18.969341",
+      "completed_at": "2026-03-12T03:30:58.235798"
+    }
+  ],
+  "current_stage": null,
+  "technique_attempts": {},
+  "global_notes": []
+}

@@ -1,0 +1,37 @@
+[21:35:08] INFO __main__: ============================================================
+[21:35:08] INFO __main__: amdpilot orchestrator
+[21:35:08] INFO __main__: Job: sglang-kimi-moe-tune  Type: optimize  Supervisor: on  Nudge: on  GPU: 0,1,2,3,4,5,6,7
+[21:35:08] INFO __main__: Max runtime: 1h
+[21:35:08] INFO __main__: ============================================================
+[21:35:08] INFO __main__: Model endpoint: http://10.235.27.218:30000/v1  Model: qwen-3.5  GPU: 0,1,2,3,4,5,6,7
+[21:35:08] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_kimi_moe_tune started from amdpilot-eval-sglang-kimi-moe-tune
+[21:35:08] INFO __main__: === stage1_diagnose_and_infra, Trial 1 (timeout=3600s) ===
+[21:35:08] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_kimi_moe_tune started from amdpilot-eval-sglang-kimi-moe-tune
+[21:35:09] INFO __main__: Test harness hash captured: f9429fc514a1
+[21:35:10] INFO __main__: GPU: 8 GPU(s): AMD Instinct MI355X
+[21:35:10] INFO __main__: Setting up kimi-cli in container...
+[21:35:16] INFO __main__: Launching kimi-cli (ralph mode, timeout=3600s)
+[21:53:18] INFO amdpilot.orchestrator.execution_monitor: Nudge agent response: NUDGE: The test harness is failing Tier 1 because the `device_name` field in your generated config filenames (e.g., `E=3
+[21:53:18] INFO amdpilot.orchestrator.execution_monitor: Wrote nudge [suggestion] #1: The test harness is failing Tier 1 because the `device_name` field in your gener
+[22:14:25] INFO amdpilot.orchestrator.execution_monitor: Nudge agent response: NUDGE: You are dangerously close to the time limit (20min remaining) and just reverted a regression. Stop writing new co
+[22:14:25] INFO amdpilot.orchestrator.execution_monitor: Wrote nudge [suggestion] #2: You are dangerously close to the time limit (20min remaining) and just reverted 
+[22:35:16] INFO __main__: Agent finished in 3606s
+[22:35:16] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[22:35:17] INFO __main__: No metric from agent output; running fallback benchmark...
+[22:35:17] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: cd /workspace/sglang && /opt/venv/bin/python3 /workspace/test_harness.py
+[22:35:24] INFO __main__: Fallback benchmark recovered metric: 72.50
+[22:35:24] INFO __main__: Trial 1 result: score=72.50, elapsed=3606s
+[22:35:24] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=1 stage=stage1_diagnose_and_infra metric=72.50
+[22:35:24] WARNING __main__: No profiling evidence in trial 1 — injecting profiling commands
+[22:35:24] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: cd /workspace/sglang && /opt/venv/bin/python3 /workspace/test_harness.py
+[22:35:50] INFO amdpilot.orchestrator.docker_manager: Committed container -> sglang-kimi-moe-tune:stage1_diagnose_and_infra
+[22:36:09] INFO amdpilot.orchestrator.docker_manager: Committed container -> sglang-kimi-moe-tune:best
+[22:36:09] INFO __main__: Best checkpoint updated: none -> 74.40  image=sglang-kimi-moe-tune:best
+[22:36:09] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 1 (Claude, direct API)...
+[22:36:13] INFO amdpilot.orchestrator.supervisor: Supervisor raw response: {"action":"stop","analysis":"Time has expired (approximately -1 minutes remaining). The agent achieved a best score of 74.40, improving from an initial 2.0/100 to ~74 by creating int4_w4a16 config fil
+[22:36:13] INFO amdpilot.orchestrator.supervisor: Supervisor decision: stop — Time has expired (approximately -1 minutes remaining). The agent achieved a best score of 74.40, imp
+[22:36:13] INFO __main__: Supervisor: STOP — Time has expired (approximately -1 minutes remaining). The agent achieved a best score of 74.40, improving from an initial 2.0/100 to ~74 by creating int4_w4a16 config files and tuning fused MoE kernels. No time remains for further trials.
+[22:36:13] INFO __main__: 
+[22:36:13] INFO __main__: ============================================================
+[22:36:13] INFO __main__: Orchestrator Complete — Best: 72.50 score (3665s)
+[22:36:13] INFO __main__: ============================================================

@@ -1,0 +1,1 @@
+{"trial": 1, "stage": "stage1_diagnose_and_infra", "elapsed_s": 3606, "metric_name": "score", "metric_value": "72.50", "image": "amdpilot-eval-sglang-kimi-moe-tune", "job": "sglang-kimi-moe-tune", "state_file": "results_ablation_A/trial_1/optimization_state.json", "extra": {}, "score": "72.50"}

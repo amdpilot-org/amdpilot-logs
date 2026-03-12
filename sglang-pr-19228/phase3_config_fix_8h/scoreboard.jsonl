@@ -1,0 +1,4 @@
+{"trial": 1, "stage": "stage1_diagnose_and_infra", "elapsed_s": 519, "metric_name": "score", "metric_value": "2.00", "image": "amdpilot-eval-sglang-kimi-moe-tune", "job": "sglang-kimi-moe-tune", "extra": {}, "score": "2.00"}
+{"trial": 2, "stage": "stage1_diagnose_and_infra", "elapsed_s": 2841, "metric_name": "score", "metric_value": "63.10", "image": "sglang-kimi-moe-tune:best", "job": "sglang-kimi-moe-tune", "extra": {}, "score": "63.10"}
+{"trial": 3, "stage": "stage2_systematic_tuning", "elapsed_s": 765, "metric_name": "score", "metric_value": "58.00", "image": "sglang-kimi-moe-tune:stage1_diagnose_and_infra", "job": "sglang-kimi-moe-tune", "extra": {}, "score": "58.00"}
+{"trial": 4, "stage": "stage3_optimize_further", "elapsed_s": 2980, "metric_name": "score", "metric_value": "74.80", "image": "sglang-kimi-moe-tune:stage2_systematic_tuning", "job": "sglang-kimi-moe-tune", "extra": {}, "score": "74.80"}

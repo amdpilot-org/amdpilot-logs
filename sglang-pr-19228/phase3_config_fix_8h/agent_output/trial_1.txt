@@ -1,0 +1,40 @@
+
+--- STDERR ---
+   Building pykaos @ file:///sgl-workspace/kimi-cli/packages/kaos
+Downloading openai (1.0MiB)
+Downloading setuptools (1.1MiB)
+Downloading pygments (1.2MiB)
+Downloading aiohttp (1.6MiB)
+Downloading pydantic-core (2.0MiB)
+Downloading babel (9.7MiB)
+Downloading ruff (10.7MiB)
+Downloading uvloop (4.1MiB)
+Downloading batrachian-toad (1.3MiB)
+Downloading pyright (6.1MiB)
+Downloading pillow (6.7MiB)
+Downloading ty (9.9MiB)
+Downloading cryptography (4.3MiB)
+Downloading lxml (5.0MiB)
+   Building ripgrepy==2.2.0
+ Downloaded openai
+ Downloaded setuptools
+ Downloaded pygments
+ Downloaded batrachian-toad
+ Downloaded aiohttp
+ Downloaded pydantic-core
+ Downloaded uvloop
+ Downloaded cryptography
+ Downloaded lxml
+ Downloaded pyright
+ Downloaded pillow
+ Downloaded babel
+ Downloaded ty
+ Downloaded ruff
+  × Failed to build `pykaos @ file:///sgl-workspace/kimi-cli/packages/kaos`
+  ├─▶ Failed to resolve requirements from `build-system.requires`
+  ├─▶ No solution found when resolving: `uv-build>=0.8.5, <0.9.0`
+  ├─▶ Request failed after 3 retries in 111.9s
+  ├─▶ Failed to fetch: `https://pypi.org/simple/uv-build/`
+  ├─▶ error sending request for url (https://pypi.org/simple/uv-build/)
+  ╰─▶ operation timed out
+  help: `pykaos` was included because `kimi-cli` (v1.15.0) depends on `pykaos`

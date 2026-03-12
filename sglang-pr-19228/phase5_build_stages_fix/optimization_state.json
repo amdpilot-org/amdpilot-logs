@@ -1,0 +1,201 @@
+{
+  "job_name": "sglang-kimi-moe-tune",
+  "repo": "https://github.com/sgl-project/sglang.git",
+  "initial_baseline_ms": 59.3,
+  "current_best_ms": 78.2,
+  "stages_completed": [
+    {
+      "stage": "stage1_profile_and_infra",
+      "baseline_ms": null,
+      "current_best_ms": 59.3,
+      "applied_optimizations": [],
+      "attempted_but_failed": [],
+      "profiling_summary": {
+        "top_bottlenecks": [],
+        "gpu_utilization": 0.0,
+        "memory_usage_gb": 0.0,
+        "kernel_breakdown": {},
+        "raw_profile_path": "",
+        "timestamp": ""
+      },
+      "environment_changes": [],
+      "notes": [],
+      "started_at": "2026-03-11T14:48:19.508128",
+      "completed_at": "2026-03-11T15:06:19.089426"
+    },
+    {
+      "stage": "stage2_systematic_tuning",
+      "baseline_ms": 59.3,
+      "current_best_ms": 73.2,
+      "applied_optimizations": [],
+      "attempted_but_failed": [],
+      "profiling_summary": {
+        "top_bottlenecks": [],
+        "gpu_utilization": 0.0,
+        "memory_usage_gb": 0.0,
+        "kernel_breakdown": {},
+        "raw_profile_path": "",
+        "timestamp": ""
+      },
+      "environment_changes": [],
+      "notes": [],
+      "started_at": "2026-03-11T15:07:00.792608",
+      "completed_at": "2026-03-11T15:15:55.173926"
+    },
+    {
+      "stage": "stage3_small_batch_optimization",
+      "baseline_ms": 73.2,
+      "current_best_ms": 75.4,
+      "applied_optimizations": [],
+      "attempted_but_failed": [],
+      "profiling_summary": {
+        "top_bottlenecks": [],
+        "gpu_utilization": 0.0,
+        "memory_usage_gb": 0.0,
+        "kernel_breakdown": {},
+        "raw_profile_path": "",
+        "timestamp": ""
+      },
+      "environment_changes": [],
+      "notes": [],
+      "started_at": "2026-03-11T15:16:13.031061",
+      "completed_at": "2026-03-11T16:06:22.714698"
+    },
+    {
+      "stage": "stage3_small_batch_optimization",
+      "baseline_ms": 75.4,
+      "current_best_ms": 75.5,
+      "applied_optimizations": [],
+      "attempted_but_failed": [],
+      "profiling_summary": {
+        "top_bottlenecks": [],
+        "gpu_utilization": 0.0,
+        "memory_usage_gb": 0.0,
+        "kernel_breakdown": {},
+        "raw_profile_path": "",
+        "timestamp": ""
+      },
+      "environment_changes": [],
+      "notes": [],
+      "started_at": "2026-03-11T16:07:20.956443",
+      "completed_at": "2026-03-11T16:31:31.408412"
+    },
+    {
+      "stage": "stage3_small_batch_optimization",
+      "baseline_ms": 75.5,
+      "current_best_ms": 71.8,
+      "applied_optimizations": [],
+      "attempted_but_failed": [],
+      "profiling_summary": {
+        "top_bottlenecks": [],
+        "gpu_utilization": 0.0,
+        "memory_usage_gb": 0.0,
+        "kernel_breakdown": {},
+        "raw_profile_path": "",
+        "timestamp": ""
+      },
+      "environment_changes": [],
+      "notes": [],
+      "started_at": "2026-03-11T16:32:10.569032",
+      "completed_at": "2026-03-11T17:01:08.927622"
+    },
+    {
+      "stage": "stage3_small_batch_optimization",
+      "baseline_ms": 71.8,
+      "current_best_ms": 74.2,
+      "applied_optimizations": [],
+      "attempted_but_failed": [],
+      "profiling_summary": {
+        "top_bottlenecks": [],
+        "gpu_utilization": 0.0,
+        "memory_usage_gb": 0.0,
+        "kernel_breakdown": {},
+        "raw_profile_path": "",
+        "timestamp": ""
+      },
+      "environment_changes": [],
+      "notes": [],
+      "started_at": "2026-03-11T17:01:42.962541",
+      "completed_at": "2026-03-11T17:32:56.212209"
+    },
+    {
+      "stage": "stage3_small_batch_optimization",
+      "baseline_ms": 74.2,
+      "current_best_ms": 74.4,
+      "applied_optimizations": [],
+      "attempted_but_failed": [],
+      "profiling_summary": {
+        "top_bottlenecks": [],
+        "gpu_utilization": 0.0,
+        "memory_usage_gb": 0.0,
+        "kernel_breakdown": {},
+        "raw_profile_path": "",
+        "timestamp": ""
+      },
+      "environment_changes": [],
+      "notes": [],
+      "started_at": "2026-03-11T17:33:38.974537",
+      "completed_at": "2026-03-11T18:21:02.771008"
+    },
+    {
+      "stage": "stage3_small_batch_optimization",
+      "baseline_ms": 74.4,
+      "current_best_ms": 73.7,
+      "applied_optimizations": [],
+      "attempted_but_failed": [],
+      "profiling_summary": {
+        "top_bottlenecks": [],
+        "gpu_utilization": 0.0,
+        "memory_usage_gb": 0.0,
+        "kernel_breakdown": {},
+        "raw_profile_path": "",
+        "timestamp": ""
+      },
+      "environment_changes": [],
+      "notes": [],
+      "started_at": "2026-03-11T18:21:35.627030",
+      "completed_at": "2026-03-11T18:52:25.928916"
+    },
+    {
+      "stage": "stage3_small_batch_optimization",
+      "baseline_ms": 73.7,
+      "current_best_ms": 78.2,
+      "applied_optimizations": [],
+      "attempted_but_failed": [],
+      "profiling_summary": {
+        "top_bottlenecks": [],
+        "gpu_utilization": 0.0,
+        "memory_usage_gb": 0.0,
+        "kernel_breakdown": {},
+        "raw_profile_path": "",
+        "timestamp": ""
+      },
+      "environment_changes": [],
+      "notes": [],
+      "started_at": "2026-03-11T18:55:11.080991",
+      "completed_at": "2026-03-11T19:45:20.676439"
+    },
+    {
+      "stage": "stage3_small_batch_optimization",
+      "baseline_ms": 78.2,
+      "current_best_ms": 75.9,
+      "applied_optimizations": [],
+      "attempted_but_failed": [],
+      "profiling_summary": {
+        "top_bottlenecks": [],
+        "gpu_utilization": 0.0,
+        "memory_usage_gb": 0.0,
+        "kernel_breakdown": {},
+        "raw_profile_path": "",
+        "timestamp": ""
+      },
+      "environment_changes": [],
+      "notes": [],
+      "started_at": "2026-03-11T19:46:23.690627",
+      "completed_at": "2026-03-11T20:06:34.958764"
+    }
+  ],
+  "current_stage": null,
+  "technique_attempts": {},
+  "global_notes": []
+}

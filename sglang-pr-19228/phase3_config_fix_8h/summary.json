@@ -1,0 +1,77 @@
+{
+  "job": "sglang-kimi-moe-tune",
+  "type": "optimize",
+  "best_metric": "74.80",
+  "metric_name": "score",
+  "metric_direction": "higher",
+  "total_elapsed_s": 7260,
+  "stages_completed": 4,
+  "total_trials": 4,
+  "failures": 0,
+  "trials": [
+    {
+      "trial": 1,
+      "stage": "stage1_diagnose_and_infra",
+      "metric": "2.00",
+      "elapsed_s": 519,
+      "verified": true,
+      "verified_metric": 2.0,
+      "supervisor_action": "retry_with_hints",
+      "supervisor_analysis": "Trial 1 completely wasted on trying to install unrelated packages (kimi-cli/pykaos) which failed due to network timeouts. The agent never read the task description or attempted any MoE config tuning. Score remained at baseline 2.00.",
+      "nudge": {
+        "polls": 0,
+        "noops": 0,
+        "nudges_sent": 0,
+        "nudges": []
+      }
+    },
+    {
+      "trial": 2,
+      "stage": "stage1_diagnose_and_infra",
+      "metric": "63.10",
+      "elapsed_s": 2841,
+      "verified": true,
+      "verified_metric": 58.0,
+      "supervisor_action": "continue",
+      "supervisor_analysis": "Trial 2 achieved 63.10, well above stage 1 target of 25.0 and also above stage 2 target of 50.0. The orchestrator should advance. The agent needs to push toward 70.0 for stage 3 by expanding the config search space with more BLOCK_SIZE_K, num_stages, and GROUP_SIZE_M values.",
+      "nudge": {
+        "polls": 1,
+        "noops": 1,
+        "nudges_sent": 1,
+        "nudges": []
+      }
+    },
+    {
+      "trial": 3,
+      "stage": "stage2_systematic_tuning",
+      "metric": "58.00",
+      "elapsed_s": 765,
+      "verified": true,
+      "verified_metric": 58.3,
+      "supervisor_action": "continue",
+      "supervisor_analysis": "Stage 2 target of 50.0 was hit with score 58.30 (best overall 63.10 from trial 2). Advancing to stage 3 which targets 70.0. There's ~409 minutes remaining, plenty of time for further optimization. The main opportunity is in Tier 3 kernel benchmark scores (currently 40/80).",
+      "nudge": {
+        "polls": 1,
+        "noops": 1,
+        "nudges_sent": 0,
+        "nudges": []
+      }
+    },
+    {
+      "trial": 4,
+      "stage": "stage3_optimize_further",
+      "metric": "74.80",
+      "elapsed_s": 2980,
+      "verified": true,
+      "verified_metric": 73.2,
+      "supervisor_action": "stop",
+      "supervisor_analysis": "Pipeline complete. Starting from a baseline score of 2.0, the agent systematically tuned fused_moe_triton kernel configs for the Kimi K2.5 model on AMD MI355X, achieving a best score of 74.80 (target: 70.0). Key accomplishments: added int4_w4a16 support to the tuning infrastructure, performed systematic config search across batch sizes 512-16384, found optimal BLOCK_SIZE/num_warps/num_stages parameters per batch size, and deployed configs to both triton_3_5_1 and triton_3_6_0 directories, yielding ~1.5x geometric mean speedup.",
+      "nudge": {
+        "polls": 1,
+        "noops": 1,
+        "nudges_sent": 0,
+        "nudges": []
+      }
+    }
+  ]
+}
