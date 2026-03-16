@@ -1,0 +1,12 @@
+• I need to act immediately without reading files. According to the supervisor g
+  uidance, I must:
+
+  1. Kill leftover sglang processes
+  2. Apply NUM_KSPLIT changes to FP8 and BF16 GEMM configs
+  3. Run benchmark with timeout 600
+
+  Let me execute this all in one command as instructed.
+•
+
+--- EXIT CODE ---
+137
