@@ -1,0 +1,824 @@
+[06:03:42] INFO amdpilot.orchestrator.main: Loaded task description from /home/jinpan12@amd.com/amdpilot/evals/instances/vllm-skinny-gemm-mfma16/task_description.md (1346 chars)
+[06:03:42] INFO amdpilot.orchestrator.gpu_manager: Auto-assigned 1 GPU(s): 0 (free: 0,1,2,3,4,5,6,7)
+[06:03:42] INFO amdpilot.orchestrator.main: Auto-assigned 1 GPU(s): 0
+[06:03:42] INFO amdpilot.orchestrator.main: ============================================================
+[06:03:42] INFO amdpilot.orchestrator.main: amdpilot orchestrator
+[06:03:42] INFO amdpilot.orchestrator.main: Job: vllm-skinny-gemm-mfma16  Type: optimize  Supervisor: on  Nudge: on  Frontier: on  GPU: 0
+[06:03:42] INFO amdpilot.orchestrator.main: Base image: amdpilot-eval-vllm-skinny-gemm-mfma16
+[06:03:42] INFO amdpilot.orchestrator.main: Supervisor endpoint: http://localhost:8083/v1  Model: claude-opus-4-6
+[06:03:42] INFO amdpilot.orchestrator.main: Max runtime: 2h
+[06:03:42] INFO amdpilot.orchestrator.main: ============================================================
+[06:03:42] INFO amdpilot.orchestrator.main: Model endpoint: http://localhost:8083/v1  Model: claude-opus-4-6  GPU: 0
+[06:03:42] INFO amdpilot.orchestrator.main: Supervisor planning: analyzing task to generate stage plan...
+[06:03:42] INFO amdpilot.orchestrator.task_analyzer: Analyzing task with LLM to generate stage plan...
+[06:03:42] WARNING amdpilot.orchestrator.task_analyzer: Task analyzer failed: HTTP Error 502: Bad Gateway. Using default stages.
+[06:03:42] INFO amdpilot.orchestrator.main: Supervisor generated 3 stages:
+[06:03:42] INFO amdpilot.orchestrator.main:   1. stage1_baseline_and_profile (target=baseline/profile (metric + profiling advance), mode=baseline_profile, timeout=5400s)
+[06:03:42] INFO amdpilot.orchestrator.main:   2. stage2_optimize_round2 (target=auto (supervisor tightens after first metric), mode=supervisor_tightens, timeout=5400s)
+[06:03:42] INFO amdpilot.orchestrator.main:   3. stage3_optimize_round3 (target=auto (supervisor tightens after first metric), mode=supervisor_tightens, timeout=5400s)
+[06:03:42] INFO amdpilot.orchestrator.docker_manager: kimi-cli wheels up-to-date (12441e5e, 3 wheels)
+[06:03:42] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from amdpilot-eval-vllm-skinny-gemm-mfma16
+[06:03:53] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 1 (timeout=5400s) ===
+[06:03:53] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from amdpilot-eval-vllm-skinny-gemm-mfma16
+[06:03:53] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:03:53] INFO amdpilot.orchestrator.main: Installing kimi-cli from pre-built wheels...
+[06:03:59] INFO amdpilot.orchestrator.docker_manager: kimi-cli ready via wheels: kimi, version 1.15.0
+[06:04:00] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:04:00] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=5400s)
+[06:05:19] INFO amdpilot.orchestrator.main: Agent finished in 78s
+[06:05:19] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_1_trajectory
+[06:05:19] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:05:19] INFO amdpilot.orchestrator.main: No metric from agent output; running fallback benchmark...
+[06:05:19] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4800s)
+[06:05:19] INFO amdpilot.orchestrator.main: Fallback benchmark recovered metric: 44.40
+[06:05:19] INFO amdpilot.orchestrator.main: Trial 1 result: score=44.40, elapsed=78s
+[06:05:19] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=1 stage=stage1_baseline_and_profile metric=44.40
+[06:05:19] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4800s)
+[06:05:28] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:05:37] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:best
+[06:05:37] INFO amdpilot.orchestrator.main: Best checkpoint updated: none -> 44.40  image=vllm-skinny-gemm-mfma16:best
+[06:05:37] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 1 (Anthropic, direct API)...
+[06:05:37] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:05:42] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:05:52] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:06:12] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:06:12] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:06:12] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 2 (timeout=5400s) ===
+[06:06:23] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:06:23] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:06:25] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:06:25] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=5400s)
+[06:07:42] INFO amdpilot.orchestrator.main: Agent finished in 77s
+[06:07:42] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_2_trajectory
+[06:07:42] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:07:43] INFO amdpilot.orchestrator.main: Trial 2 result: score=44.40, elapsed=77s
+[06:07:43] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=2 stage=stage1_baseline_and_profile metric=44.40
+[06:07:43] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4800s)
+[06:07:47] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:07:47] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 2 (Anthropic, direct API)...
+[06:07:47] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:07:52] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:08:02] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:08:22] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:08:22] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:08:22] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 3 (timeout=5400s) ===
+[06:08:32] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:08:32] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:08:34] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:08:34] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=5400s)
+[06:09:51] INFO amdpilot.orchestrator.main: Agent finished in 77s
+[06:09:51] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_3_trajectory
+[06:09:51] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:09:51] INFO amdpilot.orchestrator.main: Trial 3 result: score=44.40, elapsed=77s
+[06:09:51] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=3 stage=stage1_baseline_and_profile metric=44.40
+[06:09:51] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4800s)
+[06:09:51] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:09:51] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 3 (Anthropic, direct API)...
+[06:09:51] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:09:56] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:10:07] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:10:27] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:10:27] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:10:27] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 4 (timeout=5400s) ===
+[06:10:37] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:10:37] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:10:38] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:10:38] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=5400s)
+[06:11:54] INFO amdpilot.orchestrator.main: Agent finished in 76s
+[06:11:54] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_4_trajectory
+[06:11:54] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:11:54] INFO amdpilot.orchestrator.main: Trial 4 result: score=44.40, elapsed=76s
+[06:11:54] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=4 stage=stage1_baseline_and_profile metric=44.40
+[06:11:54] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4800s)
+[06:11:55] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:11:55] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 4 (Anthropic, direct API)...
+[06:11:55] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:12:00] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:12:10] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:12:30] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:12:30] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:12:30] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 5 (timeout=5400s) ===
+[06:12:40] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:12:40] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:12:41] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:12:41] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=5400s)
+[06:13:58] INFO amdpilot.orchestrator.main: Agent finished in 76s
+[06:13:58] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_5_trajectory
+[06:13:58] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:13:58] INFO amdpilot.orchestrator.main: Trial 5 result: score=44.40, elapsed=76s
+[06:13:58] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=5 stage=stage1_baseline_and_profile metric=44.40
+[06:13:58] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4800s)
+[06:13:58] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:13:58] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 5 (Anthropic, direct API)...
+[06:13:58] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:14:04] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:14:14] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:14:34] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:14:34] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:14:34] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 6 (timeout=5400s) ===
+[06:14:44] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:14:44] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:14:45] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:14:45] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=5400s)
+[06:16:03] INFO amdpilot.orchestrator.main: Agent finished in 77s
+[06:16:03] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_6_trajectory
+[06:16:03] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:16:03] INFO amdpilot.orchestrator.main: Trial 6 result: score=44.40, elapsed=77s
+[06:16:03] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=6 stage=stage1_baseline_and_profile metric=44.40
+[06:16:03] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4800s)
+[06:16:04] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:16:04] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 6 (Anthropic, direct API)...
+[06:16:04] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:16:09] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:16:19] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:16:39] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:16:39] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:16:39] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 7 (timeout=5400s) ===
+[06:16:49] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:16:49] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:16:50] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:16:50] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=5400s)
+[06:18:07] INFO amdpilot.orchestrator.main: Agent finished in 76s
+[06:18:07] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_7_trajectory
+[06:18:07] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:18:07] INFO amdpilot.orchestrator.main: Trial 7 result: score=44.40, elapsed=76s
+[06:18:07] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=7 stage=stage1_baseline_and_profile metric=44.40
+[06:18:07] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4800s)
+[06:18:07] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:18:07] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 7 (Anthropic, direct API)...
+[06:18:07] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:18:12] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:18:22] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:18:42] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:18:42] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:18:42] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 8 (timeout=5400s) ===
+[06:18:52] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:18:53] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:18:54] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:18:54] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=5400s)
+[06:20:11] INFO amdpilot.orchestrator.main: Agent finished in 76s
+[06:20:11] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_8_trajectory
+[06:20:11] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:20:11] INFO amdpilot.orchestrator.main: Trial 8 result: score=44.40, elapsed=76s
+[06:20:11] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=8 stage=stage1_baseline_and_profile metric=44.40
+[06:20:11] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4800s)
+[06:20:11] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:20:11] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 8 (Anthropic, direct API)...
+[06:20:11] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:20:16] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:20:26] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:20:46] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:20:46] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:20:46] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 9 (timeout=5400s) ===
+[06:20:56] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:20:57] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:20:58] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:20:58] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=5400s)
+[06:22:15] INFO amdpilot.orchestrator.main: Agent finished in 76s
+[06:22:15] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_9_trajectory
+[06:22:15] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:22:15] INFO amdpilot.orchestrator.main: Trial 9 result: score=44.40, elapsed=76s
+[06:22:15] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=9 stage=stage1_baseline_and_profile metric=44.40
+[06:22:15] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4800s)
+[06:22:15] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:22:15] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 9 (Anthropic, direct API)...
+[06:22:15] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:22:20] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:22:30] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:22:50] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:22:50] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:22:50] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 10 (timeout=5400s) ===
+[06:23:00] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:23:00] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:23:02] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:23:02] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=5400s)
+[06:24:18] INFO amdpilot.orchestrator.main: Agent finished in 76s
+[06:24:19] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_10_trajectory
+[06:24:19] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:24:19] INFO amdpilot.orchestrator.main: Trial 10 result: score=44.40, elapsed=76s
+[06:24:19] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=10 stage=stage1_baseline_and_profile metric=44.40
+[06:24:19] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4800s)
+[06:24:19] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:24:19] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 10 (Anthropic, direct API)...
+[06:24:19] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:24:24] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:24:34] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:24:54] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:24:54] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:24:54] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 11 (timeout=5400s) ===
+[06:25:04] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:25:04] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:25:06] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:25:06] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=5400s)
+[06:26:22] INFO amdpilot.orchestrator.main: Agent finished in 76s
+[06:26:23] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_11_trajectory
+[06:26:23] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:26:23] INFO amdpilot.orchestrator.main: Trial 11 result: score=44.40, elapsed=76s
+[06:26:23] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=11 stage=stage1_baseline_and_profile metric=44.40
+[06:26:23] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4800s)
+[06:26:23] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:26:23] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 11 (Anthropic, direct API)...
+[06:26:23] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:26:28] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:26:38] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:26:58] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:26:58] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:26:58] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 12 (timeout=5400s) ===
+[06:27:08] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:27:08] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:27:10] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:27:10] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=5400s)
+[06:28:26] INFO amdpilot.orchestrator.main: Agent finished in 75s
+[06:28:26] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_12_trajectory
+[06:28:26] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:28:26] INFO amdpilot.orchestrator.main: Trial 12 result: score=44.40, elapsed=75s
+[06:28:26] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=12 stage=stage1_baseline_and_profile metric=44.40
+[06:28:26] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4800s)
+[06:28:26] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:28:26] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 12 (Anthropic, direct API)...
+[06:28:26] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:28:31] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:28:41] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:29:01] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:29:01] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:29:01] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 13 (timeout=5400s) ===
+[06:29:11] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:29:11] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:29:13] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:29:13] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=5400s)
+[06:30:30] INFO amdpilot.orchestrator.main: Agent finished in 77s
+[06:30:30] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_13_trajectory
+[06:30:30] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:30:30] INFO amdpilot.orchestrator.main: Trial 13 result: score=44.40, elapsed=77s
+[06:30:30] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=13 stage=stage1_baseline_and_profile metric=44.40
+[06:30:30] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4800s)
+[06:30:30] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:30:30] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 13 (Anthropic, direct API)...
+[06:30:30] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:30:35] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:30:45] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:31:05] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:31:05] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:31:05] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 14 (timeout=5400s) ===
+[06:31:16] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:31:16] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:31:17] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:31:17] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=5400s)
+[06:32:34] INFO amdpilot.orchestrator.main: Agent finished in 76s
+[06:32:34] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_14_trajectory
+[06:32:34] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:32:34] INFO amdpilot.orchestrator.main: Trial 14 result: score=44.40, elapsed=76s
+[06:32:34] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=14 stage=stage1_baseline_and_profile metric=44.40
+[06:32:34] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4800s)
+[06:32:34] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:32:34] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 14 (Anthropic, direct API)...
+[06:32:34] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:32:39] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:32:49] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:33:09] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:33:09] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:33:09] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 15 (timeout=5400s) ===
+[06:33:20] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:33:20] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:33:21] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:33:21] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=5400s)
+[06:34:38] INFO amdpilot.orchestrator.main: Agent finished in 76s
+[06:34:38] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_15_trajectory
+[06:34:38] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:34:38] INFO amdpilot.orchestrator.main: Trial 15 result: score=44.40, elapsed=76s
+[06:34:38] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=15 stage=stage1_baseline_and_profile metric=44.40
+[06:34:38] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4800s)
+[06:34:38] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:34:38] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 15 (Anthropic, direct API)...
+[06:34:38] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:34:43] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:34:53] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:35:13] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:35:13] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:35:13] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 16 (timeout=5309s) ===
+[06:35:24] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:35:24] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:35:25] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:35:25] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=5309s)
+[06:36:42] INFO amdpilot.orchestrator.main: Agent finished in 77s
+[06:36:42] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_16_trajectory
+[06:36:42] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:36:43] INFO amdpilot.orchestrator.main: Trial 16 result: score=44.40, elapsed=77s
+[06:36:43] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=16 stage=stage1_baseline_and_profile metric=44.40
+[06:36:43] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4800s)
+[06:36:43] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:36:43] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 16 (Anthropic, direct API)...
+[06:36:43] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:36:48] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:36:58] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:37:18] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:37:18] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:37:18] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 17 (timeout=5185s) ===
+[06:37:28] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:37:28] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:37:30] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:37:30] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=5185s)
+[06:38:47] INFO amdpilot.orchestrator.main: Agent finished in 77s
+[06:38:47] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_17_trajectory
+[06:38:47] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:38:47] INFO amdpilot.orchestrator.main: Trial 17 result: score=44.40, elapsed=77s
+[06:38:47] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=17 stage=stage1_baseline_and_profile metric=44.40
+[06:38:47] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4800s)
+[06:38:47] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:38:47] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 17 (Anthropic, direct API)...
+[06:38:47] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:38:52] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:39:02] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:39:22] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:39:22] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:39:22] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 18 (timeout=5060s) ===
+[06:39:32] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:39:33] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:39:34] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:39:34] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=5060s)
+[06:40:51] INFO amdpilot.orchestrator.main: Agent finished in 77s
+[06:40:51] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_18_trajectory
+[06:40:51] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:40:52] INFO amdpilot.orchestrator.main: Trial 18 result: score=44.40, elapsed=77s
+[06:40:52] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=18 stage=stage1_baseline_and_profile metric=44.40
+[06:40:52] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4800s)
+[06:40:52] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:40:52] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 18 (Anthropic, direct API)...
+[06:40:52] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:40:57] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:41:07] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:41:27] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:41:27] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:41:27] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 19 (timeout=4936s) ===
+[06:41:37] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:41:37] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:41:39] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:41:39] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=4936s)
+[06:42:55] INFO amdpilot.orchestrator.main: Agent finished in 76s
+[06:42:55] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_19_trajectory
+[06:42:55] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:42:55] INFO amdpilot.orchestrator.main: Trial 19 result: score=44.40, elapsed=76s
+[06:42:55] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=19 stage=stage1_baseline_and_profile metric=44.40
+[06:42:55] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4800s)
+[06:42:55] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:42:55] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 19 (Anthropic, direct API)...
+[06:42:55] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:43:00] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:43:10] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:43:30] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:43:30] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:43:30] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 20 (timeout=4812s) ===
+[06:43:41] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:43:41] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:43:42] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:43:42] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=4812s)
+[06:44:59] INFO amdpilot.orchestrator.main: Agent finished in 76s
+[06:44:59] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_20_trajectory
+[06:44:59] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:44:59] INFO amdpilot.orchestrator.main: Trial 20 result: score=44.40, elapsed=76s
+[06:44:59] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=20 stage=stage1_baseline_and_profile metric=44.40
+[06:44:59] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4723s)
+[06:44:59] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:44:59] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 20 (Anthropic, direct API)...
+[06:44:59] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:45:04] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:45:14] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:45:34] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:45:34] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:45:34] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 21 (timeout=4688s) ===
+[06:45:44] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:45:45] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:45:46] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:45:46] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=4688s)
+[06:47:03] INFO amdpilot.orchestrator.main: Agent finished in 76s
+[06:47:03] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_21_trajectory
+[06:47:03] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:47:03] INFO amdpilot.orchestrator.main: Trial 21 result: score=44.40, elapsed=76s
+[06:47:03] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=21 stage=stage1_baseline_and_profile metric=44.40
+[06:47:03] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4599s)
+[06:47:03] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:47:03] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 21 (Anthropic, direct API)...
+[06:47:03] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:47:08] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:47:18] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:47:38] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:47:38] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:47:38] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 22 (timeout=4564s) ===
+[06:47:49] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:47:49] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:47:50] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:47:50] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=4564s)
+[06:49:07] INFO amdpilot.orchestrator.main: Agent finished in 76s
+[06:49:07] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_22_trajectory
+[06:49:07] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:49:07] INFO amdpilot.orchestrator.main: Trial 22 result: score=44.40, elapsed=76s
+[06:49:07] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=22 stage=stage1_baseline_and_profile metric=44.40
+[06:49:07] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4475s)
+[06:49:07] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:49:07] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 22 (Anthropic, direct API)...
+[06:49:07] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:49:13] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:49:23] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:49:43] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:49:43] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:49:43] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 23 (timeout=4440s) ===
+[06:49:53] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:49:53] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:49:54] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:49:54] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=4440s)
+[06:51:12] INFO amdpilot.orchestrator.main: Agent finished in 77s
+[06:51:12] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_23_trajectory
+[06:51:12] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:51:12] INFO amdpilot.orchestrator.main: Trial 23 result: score=44.40, elapsed=77s
+[06:51:12] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=23 stage=stage1_baseline_and_profile metric=44.40
+[06:51:12] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4351s)
+[06:51:12] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:51:12] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 23 (Anthropic, direct API)...
+[06:51:12] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:51:17] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:51:27] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:51:47] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:51:47] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:51:47] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 24 (timeout=4315s) ===
+[06:51:57] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:51:57] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:51:59] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:51:59] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=4315s)
+[06:53:16] INFO amdpilot.orchestrator.main: Agent finished in 76s
+[06:53:16] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_24_trajectory
+[06:53:16] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:53:16] INFO amdpilot.orchestrator.main: Trial 24 result: score=44.40, elapsed=76s
+[06:53:16] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=24 stage=stage1_baseline_and_profile metric=44.40
+[06:53:16] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4226s)
+[06:53:16] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:53:16] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 24 (Anthropic, direct API)...
+[06:53:16] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:53:21] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:53:31] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:53:51] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:53:51] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:53:51] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 25 (timeout=4191s) ===
+[06:54:01] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:54:02] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:54:03] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:54:03] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=4191s)
+[06:55:20] INFO amdpilot.orchestrator.main: Agent finished in 77s
+[06:55:20] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_25_trajectory
+[06:55:20] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:55:20] INFO amdpilot.orchestrator.main: Trial 25 result: score=44.40, elapsed=77s
+[06:55:20] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=25 stage=stage1_baseline_and_profile metric=44.40
+[06:55:20] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=4102s)
+[06:55:20] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:55:20] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 25 (Anthropic, direct API)...
+[06:55:20] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:55:25] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:55:35] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:55:55] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:55:55] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:55:55] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 26 (timeout=4067s) ===
+[06:56:06] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:56:06] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:56:07] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:56:07] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=4067s)
+[06:57:24] INFO amdpilot.orchestrator.main: Agent finished in 77s
+[06:57:24] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_26_trajectory
+[06:57:24] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:57:24] INFO amdpilot.orchestrator.main: Trial 26 result: score=44.40, elapsed=77s
+[06:57:24] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=26 stage=stage1_baseline_and_profile metric=44.40
+[06:57:24] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=3978s)
+[06:57:25] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:57:25] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 26 (Anthropic, direct API)...
+[06:57:25] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:57:30] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:57:40] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[06:58:00] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[06:58:00] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[06:58:00] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 27 (timeout=3943s) ===
+[06:58:10] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:58:10] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[06:58:12] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[06:58:12] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=3943s)
+[06:59:28] INFO amdpilot.orchestrator.main: Agent finished in 76s
+[06:59:28] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_27_trajectory
+[06:59:28] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[06:59:28] INFO amdpilot.orchestrator.main: Trial 27 result: score=44.40, elapsed=76s
+[06:59:28] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=27 stage=stage1_baseline_and_profile metric=44.40
+[06:59:28] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=3854s)
+[06:59:28] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[06:59:28] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 27 (Anthropic, direct API)...
+[06:59:28] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[06:59:33] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[06:59:43] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[07:00:03] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[07:00:03] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[07:00:03] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 28 (timeout=3819s) ===
+[07:00:14] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:00:14] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[07:00:15] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[07:00:15] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=3819s)
+[07:01:32] INFO amdpilot.orchestrator.main: Agent finished in 76s
+[07:01:32] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_28_trajectory
+[07:01:32] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[07:01:32] INFO amdpilot.orchestrator.main: Trial 28 result: score=44.40, elapsed=76s
+[07:01:32] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=28 stage=stage1_baseline_and_profile metric=44.40
+[07:01:32] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=3730s)
+[07:01:32] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:01:32] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 28 (Anthropic, direct API)...
+[07:01:32] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[07:01:37] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[07:01:47] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[07:02:07] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[07:02:07] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[07:02:07] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 29 (timeout=3695s) ===
+[07:02:18] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:02:18] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[07:02:19] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[07:02:19] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=3695s)
+[07:03:36] INFO amdpilot.orchestrator.main: Agent finished in 76s
+[07:03:36] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_29_trajectory
+[07:03:36] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[07:03:36] INFO amdpilot.orchestrator.main: Trial 29 result: score=44.40, elapsed=76s
+[07:03:36] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=29 stage=stage1_baseline_and_profile metric=44.40
+[07:03:36] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=3606s)
+[07:03:36] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:03:36] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 29 (Anthropic, direct API)...
+[07:03:36] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[07:03:41] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[07:03:51] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[07:04:11] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[07:04:11] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[07:04:11] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 30 (timeout=3571s) ===
+[07:04:22] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:04:22] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[07:04:23] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[07:04:23] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=3571s)
+[07:05:40] INFO amdpilot.orchestrator.main: Agent finished in 76s
+[07:05:40] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_30_trajectory
+[07:05:40] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[07:05:40] INFO amdpilot.orchestrator.main: Trial 30 result: score=44.40, elapsed=76s
+[07:05:40] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=30 stage=stage1_baseline_and_profile metric=44.40
+[07:05:40] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=3482s)
+[07:05:40] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:05:40] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 30 (Anthropic, direct API)...
+[07:05:40] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[07:05:45] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[07:05:55] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[07:06:15] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[07:06:15] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[07:06:15] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 31 (timeout=3447s) ===
+[07:06:26] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:06:26] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[07:06:27] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[07:06:27] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=3447s)
+[07:07:44] INFO amdpilot.orchestrator.main: Agent finished in 77s
+[07:07:45] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_31_trajectory
+[07:07:45] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[07:07:45] INFO amdpilot.orchestrator.main: Trial 31 result: score=44.40, elapsed=77s
+[07:07:45] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=31 stage=stage1_baseline_and_profile metric=44.40
+[07:07:45] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=3358s)
+[07:07:45] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:07:45] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 31 (Anthropic, direct API)...
+[07:07:45] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[07:07:50] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[07:08:00] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[07:08:20] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[07:08:20] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[07:08:20] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 32 (timeout=3322s) ===
+[07:08:30] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:08:31] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[07:08:32] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[07:08:32] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=3322s)
+[07:09:49] INFO amdpilot.orchestrator.main: Agent finished in 77s
+[07:09:49] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_32_trajectory
+[07:09:50] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[07:09:50] INFO amdpilot.orchestrator.main: Trial 32 result: score=44.40, elapsed=77s
+[07:09:50] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=32 stage=stage1_baseline_and_profile metric=44.40
+[07:09:50] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=3233s)
+[07:09:50] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:09:50] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 32 (Anthropic, direct API)...
+[07:09:50] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[07:09:55] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[07:10:05] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[07:10:25] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[07:10:25] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[07:10:25] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 33 (timeout=3198s) ===
+[07:10:35] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:10:35] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[07:10:37] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[07:10:37] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=3198s)
+[07:11:54] INFO amdpilot.orchestrator.main: Agent finished in 77s
+[07:11:54] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_33_trajectory
+[07:11:54] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[07:11:54] INFO amdpilot.orchestrator.main: Trial 33 result: score=44.40, elapsed=77s
+[07:11:54] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=33 stage=stage1_baseline_and_profile metric=44.40
+[07:11:54] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=3108s)
+[07:11:55] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:11:55] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 33 (Anthropic, direct API)...
+[07:11:55] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[07:12:00] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[07:12:10] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[07:12:30] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[07:12:30] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[07:12:30] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 34 (timeout=3073s) ===
+[07:12:40] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:12:40] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[07:12:41] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[07:12:41] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=3073s)
+[07:13:58] INFO amdpilot.orchestrator.main: Agent finished in 76s
+[07:13:58] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_34_trajectory
+[07:13:59] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[07:13:59] INFO amdpilot.orchestrator.main: Trial 34 result: score=44.40, elapsed=76s
+[07:13:59] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=34 stage=stage1_baseline_and_profile metric=44.40
+[07:13:59] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=2984s)
+[07:13:59] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:13:59] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 34 (Anthropic, direct API)...
+[07:13:59] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[07:14:04] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[07:14:14] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[07:14:34] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[07:14:34] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[07:14:34] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 35 (timeout=2949s) ===
+[07:14:44] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:14:44] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[07:14:46] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[07:14:46] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=2949s)
+[07:16:02] INFO amdpilot.orchestrator.main: Agent finished in 76s
+[07:16:02] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_35_trajectory
+[07:16:02] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[07:16:02] INFO amdpilot.orchestrator.main: Trial 35 result: score=44.40, elapsed=76s
+[07:16:02] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=35 stage=stage1_baseline_and_profile metric=44.40
+[07:16:02] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=2860s)
+[07:16:02] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:16:02] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 35 (Anthropic, direct API)...
+[07:16:02] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[07:16:07] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[07:16:17] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[07:16:37] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[07:16:37] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[07:16:37] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 36 (timeout=2825s) ===
+[07:16:48] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:16:48] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[07:16:49] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[07:16:49] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=2825s)
+[07:18:07] INFO amdpilot.orchestrator.main: Agent finished in 77s
+[07:18:07] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_36_trajectory
+[07:18:07] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[07:18:07] INFO amdpilot.orchestrator.main: Trial 36 result: score=44.40, elapsed=77s
+[07:18:07] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=36 stage=stage1_baseline_and_profile metric=44.40
+[07:18:07] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=2736s)
+[07:18:07] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:18:07] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 36 (Anthropic, direct API)...
+[07:18:07] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[07:18:12] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[07:18:22] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[07:18:42] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[07:18:42] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[07:18:42] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 37 (timeout=2700s) ===
+[07:18:52] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:18:53] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[07:18:54] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[07:18:54] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=2700s)
+[07:20:09] INFO amdpilot.orchestrator.main: Agent finished in 75s
+[07:20:10] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_37_trajectory
+[07:20:10] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[07:20:10] INFO amdpilot.orchestrator.main: Trial 37 result: score=44.40, elapsed=75s
+[07:20:10] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=37 stage=stage1_baseline_and_profile metric=44.40
+[07:20:10] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=2613s)
+[07:20:10] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:20:10] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 37 (Anthropic, direct API)...
+[07:20:10] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[07:20:15] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[07:20:25] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[07:20:45] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[07:20:45] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[07:20:45] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 38 (timeout=2578s) ===
+[07:20:55] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:20:55] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[07:20:57] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[07:20:57] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=2578s)
+[07:22:14] INFO amdpilot.orchestrator.main: Agent finished in 77s
+[07:22:14] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_38_trajectory
+[07:22:14] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[07:22:14] INFO amdpilot.orchestrator.main: Trial 38 result: score=44.40, elapsed=77s
+[07:22:14] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=38 stage=stage1_baseline_and_profile metric=44.40
+[07:22:14] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=2488s)
+[07:22:14] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:22:14] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 38 (Anthropic, direct API)...
+[07:22:14] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[07:22:19] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[07:22:29] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[07:22:49] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[07:22:49] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[07:22:49] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 39 (timeout=2453s) ===
+[07:23:00] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:23:00] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[07:23:01] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[07:23:01] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=2453s)
+[07:24:19] INFO amdpilot.orchestrator.main: Agent finished in 77s
+[07:24:19] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_39_trajectory
+[07:24:19] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[07:24:19] INFO amdpilot.orchestrator.main: Trial 39 result: score=44.40, elapsed=77s
+[07:24:19] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=39 stage=stage1_baseline_and_profile metric=44.40
+[07:24:19] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=2363s)
+[07:24:19] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:24:19] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 39 (Anthropic, direct API)...
+[07:24:19] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[07:24:24] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[07:24:34] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[07:24:54] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[07:24:54] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[07:24:54] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 40 (timeout=2328s) ===
+[07:25:04] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:25:05] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[07:25:06] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[07:25:06] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=2328s)
+[07:26:23] INFO amdpilot.orchestrator.main: Agent finished in 76s
+[07:26:23] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_40_trajectory
+[07:26:23] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[07:26:23] INFO amdpilot.orchestrator.main: Trial 40 result: score=44.40, elapsed=76s
+[07:26:23] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=40 stage=stage1_baseline_and_profile metric=44.40
+[07:26:23] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=2239s)
+[07:26:23] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:26:23] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 40 (Anthropic, direct API)...
+[07:26:23] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[07:26:28] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[07:26:38] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[07:26:58] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[07:26:58] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[07:26:58] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 41 (timeout=2204s) ===
+[07:27:09] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:27:09] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[07:27:10] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[07:27:10] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=2204s)
+[07:28:27] INFO amdpilot.orchestrator.main: Agent finished in 76s
+[07:28:27] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_41_trajectory
+[07:28:27] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[07:28:27] INFO amdpilot.orchestrator.main: Trial 41 result: score=44.40, elapsed=76s
+[07:28:27] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=41 stage=stage1_baseline_and_profile metric=44.40
+[07:28:27] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=2115s)
+[07:28:28] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:28:28] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 41 (Anthropic, direct API)...
+[07:28:28] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[07:28:33] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[07:28:43] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[07:29:03] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[07:29:03] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[07:29:03] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 42 (timeout=2080s) ===
+[07:29:13] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:29:13] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[07:29:15] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[07:29:15] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=2080s)
+[07:30:32] INFO amdpilot.orchestrator.main: Agent finished in 77s
+[07:30:32] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_42_trajectory
+[07:30:32] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[07:30:32] INFO amdpilot.orchestrator.main: Trial 42 result: score=44.40, elapsed=77s
+[07:30:32] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=42 stage=stage1_baseline_and_profile metric=44.40
+[07:30:32] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=1990s)
+[07:30:32] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:30:32] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 42 (Anthropic, direct API)...
+[07:30:32] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[07:30:37] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[07:30:47] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[07:31:07] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[07:31:07] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[07:31:07] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 43 (timeout=1955s) ===
+[07:31:18] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:31:18] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[07:31:19] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[07:31:19] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=1955s)
+[07:32:36] INFO amdpilot.orchestrator.main: Agent finished in 77s
+[07:32:36] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_43_trajectory
+[07:32:36] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[07:32:37] INFO amdpilot.orchestrator.main: Trial 43 result: score=44.40, elapsed=77s
+[07:32:37] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=43 stage=stage1_baseline_and_profile metric=44.40
+[07:32:37] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=1866s)
+[07:32:37] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:32:37] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 43 (Anthropic, direct API)...
+[07:32:37] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[07:32:42] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[07:32:52] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[07:33:12] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[07:33:12] INFO amdpilot.orchestrator.main: stage1_baseline_and_profile target missed (44.40)
+[07:33:12] INFO amdpilot.orchestrator.main: === stage1_baseline_and_profile, Trial 44 (timeout=1831s) ===
+[07:33:22] INFO amdpilot.orchestrator.docker_manager: Container amdpilot_eval_vllm_skinny_gemm_mfma16 started from vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:33:22] INFO amdpilot.orchestrator.main: Test harness hash captured: 7a5dddb99a03
+[07:33:23] INFO amdpilot.orchestrator.main: GPU: 1 GPU(s): AMD Instinct MI355X
+[07:33:24] INFO amdpilot.orchestrator.main: Launching kimi-cli (streaming ralph mode, timeout=1831s)
+[07:34:41] INFO amdpilot.orchestrator.main: Agent finished in 77s
+[07:34:41] INFO amdpilot.orchestrator.main: Saved kimi-cli trajectory to results/agent_output/trial_44_trajectory
+[07:34:41] INFO amdpilot.orchestrator.state_manager: Merged agent state from container
+[07:34:41] INFO amdpilot.orchestrator.main: Trial 44 result: score=44.40, elapsed=77s
+[07:34:41] INFO amdpilot.orchestrator.scoreboard: Scoreboard: trial=44 stage=stage1_baseline_and_profile metric=44.40
+[07:34:41] INFO amdpilot.orchestrator.benchmark_hook: Running independent verification: /opt/venv/bin/python3 /workspace/test_harness.py (timeout=1741s)
+[07:34:41] INFO amdpilot.orchestrator.docker_manager: Committed container -> vllm-skinny-gemm-mfma16:stage1_baseline_and_profile
+[07:34:41] INFO amdpilot.orchestrator.supervisor: Running supervisor review for trial 44 (Anthropic, direct API)...
+[07:34:41] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 1 failed: HTTP Error 502: Bad Gateway (retry in 5s)
+[07:34:46] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 2 failed: HTTP Error 502: Bad Gateway (retry in 10s)
+[07:34:57] WARNING amdpilot.orchestrator.supervisor: Supervisor API attempt 3 failed: HTTP Error 502: Bad Gateway (retry in 20s)
+[07:35:17] WARNING amdpilot.orchestrator.supervisor: Supervisor API failed after 3 attempts: HTTP Error 502: Bad Gateway
+[07:35:17] INFO amdpilot.orchestrator.main: Supervisor: STOP — Insufficient time remaining.
+[07:35:27] INFO amdpilot.orchestrator.main: Stopped container amdpilot_eval_vllm_skinny_gemm_mfma16
+[07:35:27] INFO amdpilot.orchestrator.main: 
+[07:35:27] INFO amdpilot.orchestrator.main: ============================================================
+[07:35:27] INFO amdpilot.orchestrator.main: Orchestrator Complete — Best: 44.40 score (5504s)
+[07:35:27] INFO amdpilot.orchestrator.main: ============================================================
