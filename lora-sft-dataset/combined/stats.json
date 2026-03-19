@@ -1,33 +1,40 @@
 {
-  "total_examples": 96,
+  "total_examples": 125,
   "sources": {
     "amdpilot-kernelbench-phase3": 94,
-    "sglang-sft-claude-executor": 2
+    "sglang-sft-claude-executor": 2,
+    "amd-kernel-sft-pipeline": 29
   },
   "task_types": {
     "optimize": 94,
-    "bugfix": 1,
+    "bugfix": 30,
     "feature": 1
   },
-  "executor_models": {
-    "Qwen3.5-397B-A17B": 94,
-    "Claude Opus 4.6": 2
+  "repos": {
+    "KernelBench (Triton)": 94,
+    "SGLang (amdpilot)": 2,
+    "ROCm/HIPIFY": 8,
+    "ROCm/rocm-libraries": 3,
+    "pytorch/pytorch": 4,
+    "ROCm/composable_kernel": 6,
+    "ROCm/HIP": 5,
+    "ROCm/aiter": 3
   },
   "score_stats": {
-    "min": 60.0,
+    "min": 50.0,
     "max": 100.0,
-    "mean": 64.66
+    "mean": 69.26
   },
   "message_stats": {
-    "min": 28,
-    "max": 234,
-    "mean": 113.5,
-    "total": 10900
+    "min": 25,
+    "max": 290,
+    "mean": 116.1,
+    "total": 14507
   },
   "tool_call_stats": {
     "min": 14,
-    "max": 118,
-    "mean": 57.1,
-    "total": 5486
+    "max": 150,
+    "mean": 58.8,
+    "total": 7356
   }
 }

@@ -1,0 +1,18 @@
+{
+  "source": "amd-kernel-sft-pipeline",
+  "description": "Agent trajectories from solving real AMD GPU kernel PRs",
+  "executor_model": "Claude Opus 4.6 (via OpenHands)",
+  "total_examples": 29,
+  "pass_count": 20,
+  "partial_count": 9,
+  "repos": {
+    "ROCm/HIPIFY": 8,
+    "ROCm/rocm-libraries": 3,
+    "pytorch/pytorch": 4,
+    "ROCm/composable_kernel": 6,
+    "ROCm/HIP": 5,
+    "ROCm/aiter": 3
+  },
+  "avg_messages": 124.4,
+  "avg_tool_calls": 64.5
+}
