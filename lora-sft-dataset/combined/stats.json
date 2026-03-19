@@ -1,0 +1,33 @@
+{
+  "total_examples": 96,
+  "sources": {
+    "amdpilot-kernelbench-phase3": 94,
+    "sglang-sft-claude-executor": 2
+  },
+  "task_types": {
+    "optimize": 94,
+    "bugfix": 1,
+    "feature": 1
+  },
+  "executor_models": {
+    "Qwen3.5-397B-A17B": 94,
+    "Claude Opus 4.6": 2
+  },
+  "score_stats": {
+    "min": 60.0,
+    "max": 100.0,
+    "mean": 64.66
+  },
+  "message_stats": {
+    "min": 28,
+    "max": 234,
+    "mean": 113.5,
+    "total": 10900
+  },
+  "tool_call_stats": {
+    "min": 14,
+    "max": 118,
+    "mean": 57.1,
+    "total": 5486
+  }
+}

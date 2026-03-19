@@ -1,0 +1,14 @@
+{
+  "source_pr": "sgl-project/sglang#19935",
+  "task_type": "bugfix",
+  "score": 100.0,
+  "executor_model": "Claude Opus 4.6",
+  "num_turns": 34,
+  "num_tool_calls": 41,
+  "num_messages": 75,
+  "anti_reward_hacking": {
+    "git_history_stripped": true,
+    "ast_verification": true,
+    "verified_against_human_pr": true
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "source_pr": "sgl-project/sglang#20187",
+  "task_type": "feature",
+  "score": 100.0,
+  "executor_model": "Claude Opus 4.6",
+  "num_turns": 63,
+  "num_tool_calls": 63,
+  "num_messages": 126,
+  "anti_reward_hacking": {
+    "git_history_stripped": true,
+    "ast_verification": true,
+    "verified_against_human_pr": true
+  }
+}
