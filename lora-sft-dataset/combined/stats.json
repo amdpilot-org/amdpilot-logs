@@ -1,40 +1,31 @@
 {
-  "total_examples": 125,
+  "total_examples": 96,
   "sources": {
     "amdpilot-kernelbench-phase3": 94,
-    "sglang-sft-claude-executor": 2,
-    "amd-kernel-sft-pipeline": 29
+    "sglang-sft-claude-executor": 2
   },
   "task_types": {
     "optimize": 94,
-    "bugfix": 30,
+    "bugfix": 1,
     "feature": 1
   },
-  "repos": {
-    "KernelBench (Triton)": 94,
-    "SGLang (amdpilot)": 2,
-    "ROCm/HIPIFY": 8,
-    "ROCm/rocm-libraries": 3,
-    "pytorch/pytorch": 4,
-    "ROCm/composable_kernel": 6,
-    "ROCm/HIP": 5,
-    "ROCm/aiter": 3
-  },
   "score_stats": {
-    "min": 50.0,
+    "min": 60.0,
     "max": 100.0,
-    "mean": 69.26
+    "mean": 64.66
   },
   "message_stats": {
-    "min": 25,
-    "max": 290,
-    "mean": 116.1,
-    "total": 14507
+    "min": 28,
+    "max": 234,
+    "mean": 113.5,
+    "total": 10900
   },
   "tool_call_stats": {
     "min": 14,
-    "max": 150,
-    "mean": 58.8,
-    "total": 7356
-  }
+    "max": 118,
+    "mean": 57.1,
+    "total": 5486
+  },
+  "all_from_amdpilot": true,
+  "agent_framework": "kimi-cli (amdpilot orchestrator)"
 }
