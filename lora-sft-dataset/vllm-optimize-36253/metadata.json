@@ -1,0 +1,9 @@
+{
+  "source_task": "vllm-36253-gemm-optimization",
+  "task_type": "optimize",
+  "score": 100.0,
+  "executor_model": "Claude Opus 4.6",
+  "num_turns": 57,
+  "num_tool_calls": 62,
+  "num_messages": 119
+}

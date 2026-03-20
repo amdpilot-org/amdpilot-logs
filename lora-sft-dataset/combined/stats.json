@@ -1,32 +1,32 @@
 {
-  "total_examples": 98,
+  "total_examples": 100,
   "sources": {
     "amdpilot-kernelbench-phase3": 94,
-    "sglang-sft-claude-executor": 2,
+    "sglang-sft-claude-executor": 4,
     "amdpilot-sglang-moe-tune": 1,
     "amdpilot-vllm-skinny-gemm": 1
   },
   "task_types": {
-    "optimize": 96,
-    "bugfix": 1,
+    "optimize": 97,
+    "bugfix": 2,
     "feature": 1
   },
   "score_stats": {
     "min": 60.0,
     "max": 100.0,
-    "mean": 65.17
+    "mean": 65.86
   },
   "message_stats": {
     "min": 28,
     "max": 234,
-    "mean": 115.1,
-    "total": 11281
+    "mean": 116.1,
+    "total": 11608
   },
   "tool_call_stats": {
     "min": 14,
     "max": 118,
-    "mean": 58.0,
-    "total": 5681
+    "mean": 58.5,
+    "total": 5849
   },
   "all_from_amdpilot": true
 }

@@ -1,0 +1,9 @@
+{
+  "source_task": "sglang-18526-aiter-mla-decode-fix",
+  "task_type": "bugfix",
+  "score": 100.0,
+  "executor_model": "Claude Opus 4.6",
+  "num_turns": 102,
+  "num_tool_calls": 106,
+  "num_messages": 208
+}
