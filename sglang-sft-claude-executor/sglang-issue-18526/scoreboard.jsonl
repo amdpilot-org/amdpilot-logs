@@ -1,0 +1,1 @@
+{"trial": 1, "stage": "stage1_diagnose_and_fix", "elapsed_s": 3601, "metric_name": "score", "metric_value": "100.00", "image": "sglang-issue-18526:base", "job": "sglang-issue-18526", "run_id": "", "status": "verified", "metric_source": "verification_run", "verified_metric": 100.0, "failure_reason": "", "extra": {}, "score": "100.00"}

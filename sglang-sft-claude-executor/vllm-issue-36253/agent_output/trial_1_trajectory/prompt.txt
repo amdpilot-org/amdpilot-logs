@@ -1,0 +1,224 @@
+# Task: Optimize Optimize fused_topk_bias to use aiter biased_grouped_topk kernel instead of fallback PyTorch ops for MiniMax-M2.5 on AMD GPU -- Stage1 Implement Aiter Fast Path
+
+## Starting Point
+
+You are starting from a **clean environment**.
+- Base image: `sglang-issue-36253:base`
+- Repo cloned at `/workspace/` from `https://github.com/vllm-project/vllm.git`
+- **CHECK FIRST**: Run `ls /workspace/` to see if a previous trial left benchmark scripts or results. Reuse them if they exist.
+
+## Task Description
+
+# [ROCM] Optimize fused_topk_bias to use aiter instead of fallback torch ops
+
+## Bug Description
+
+When running MiniMax-M2.5 (a Mixture-of-Experts model with 256 experts) on ROCm with `VLLM_ROCM_USE_AITER=1`, the `fused_topk_bias` function in vLLM falls back to generic PyTorch ops for the biased top-k routing computation. This fallback path is significantly slower than using optimized aiter kernels, causing a measurable throughput degradation (~14% slower TPOT).
+
+The issue is that `fused_topk_bias` lacks a fast path to leverage aiter's `biased_grouped_topk` kernel when sigmoid scoring with bias correction is used. The aiter kernel has a hard limit of 32 experts per group, and models like MiniMax-M2.5 with 256 experts need the group count computed correctly to satisfy this constraint.
+
+## Expected Fix
+
+Add a fast path in `fused_topk_bias` that:
+
+1. Detects when running on ROCm with aiter enabled and sigmoid scoring with bias correction
+2. Computes the smallest `num_expert_group` that satisfies `num_experts / num_expert_group <= 32` and evenly divides `num_experts`
+3. Sets `topk_group = num_expert_group` to make it semantically equivalent to a global top-k with bias correction
+4. Routes to aiter's `biased_grouped_topk` kernel instead of the generic Python fallback
+
+The key file to modify is:
+- `vllm/model_executor/layers/fused_moe/router/fused_topk_bias_router.py`
+
+## Environment
+
+- **Hardware**: MI355X x8
+- **Repository**: vLLM installed at `/usr/local/lib/python3.12/dist-packages/vllm/`
+- **Key file(s)**: `/usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/fused_moe/router/fused_topk_bias_router.py`
+- **Model**: MiniMax-M2.5 at `/models/MiniMax-M2.5`
+
+## Reproduction
+
+```bash
+export VLLM_ROCM_USE_AITER=1
+vllm serve /models/MiniMax-M2.5 \
+    --tensor-parallel-size 8 \
+    --enable-expert-parallel \
+    --max-num-batched-tokens 196608 \
+    --max-model-len 10240 \
+    --max-num-seqs 512 \
+    --block-size 32 \
+    --trust-remote-code \
+    --no-enable-prefix-caching \
+    --port 30000
+```
+
+The server will start but routing computations will use the slow PyTorch fallback path. Profiling will show the topk operations as a bottleneck.
+
+## Verification
+
+After applying the fix, the server should use the aiter fast path for biased top-k routing.
+
+The test harness at `/workspace/test_harness.py` will:
+1. Start the vLLM server with MiniMax-M2.5 and aiter enabled
+2. Wait for the server to become healthy
+3. Send test requests to verify correct generation
+4. Report SCORE: 100 if working correctly
+
+## Optimization Playbook
+
+Read both the `amd-kernel-optimization` and `gpu-profiling` skills before making source changes.
+Use this sequence unless the task description gives a stronger task-specific instruction:
+1. Establish the real baseline with the standard benchmark.
+2. Reuse the existing profiling picture unless a code change invalidated it.
+   Do not spend the whole stage rebuilding the profiling picture if previous trials already identified the hotspot.
+3. If optimization_state already names a hotspot kernel, backend, file, or symbol, start there before broad code exploration.
+4. Prefer source-level changes tied to hotspot_targets over generic env-var or backend sweeps.
+5. Do NOT spend the stage on broad backend/env-var sweeps when profiling already points at the hotspot.
+6. Create or reuse a fast profiling path when the standard benchmark is too slow (for graph-heavy workloads, disable CUDA graphs first).
+7. Before treating `torch.compile` as unexplored, confirm whether compiled regions are already active in the current checkpoint. If they are not, try `torch.compile(mode="default")` as the first major optimization lever, then fix graph breaks.
+8. Use profiler output to choose the next concrete source-level optimization instead of guessing.
+9. When profiling shows GEMM-dominated time, check whether the active backend has tuning configs optimized for the actual tensor shapes used by the workload. Defaults often use large block sizes that are suboptimal for small-batch decode. Read the model config to find the exact dimensions, then look for shape-specific configs or create them. Shape-targeted config changes typically give much larger gains than env-var tuning.
+10. If the metric is not improving, stop broad re-profiling, make one targeted change or benchmark, and run the standard benchmark as the final measurement and last command.
+
+## Optimization State
+
+
+### Current stage carry-over: stage1_implement_aiter_fast_path
+
+## Execution Environment
+
+You are running inside a Docker container with ROCm, PyTorch, and GPU access.
+All commands run directly in this container — no `docker exec` needed.
+- Repo at `/workspace/`
+
+## Goal
+
+Achieve **>=100.0 score** for `` on AMD GPU.
+Run the verification command: `python3 /workspace/test_harness.py`
+
+## Stage Hints
+
+1. Examine the key file: `/usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/fused_moe/router/fused_topk_bias_router.py`. Understand the current `fused_topk_bias` function and its fallback path.
+
+2. Find how aiter's `biased_grouped_topk` is imported/used elsewhere in vLLM. Search for existing aiter integration patterns:
+   - `grep -r 'biased_grouped_topk' /usr/local/lib/python3.12/dist-packages/vllm/`
+   - `grep -r 'grouped_topk' /usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/fused_moe/`
+   - Look at how `VLLM_ROCM_USE_AITER` is checked (likely via `envs.VLLM_ROCM_USE_AITER` or similar)
+   - Check `from vllm.model_executor.layers.fused_moe.fused_moe` or similar modules for the aiter path pattern
+
+3. Also check the aiter package itself to understand the `biased_grouped_topk` API:
+   - `python3 -c "from aiter import biased_grouped_topk; help(biased_grouped_topk)"` or inspect the source
+   - Note its function signature and expected arguments
+
+4. Implement the fast path in `fused_topk_bias`:
+   - Add detection: check `HAS_AITER` or `use_aiter` flag (follow existing patterns in the codebase)
+   - Compute `num_expert_group`: find the smallest divisor of `num_experts` such that `num_experts // num_expert_group <= 32`. For 256 experts, this would be 8 (256/8=32).
+   - Set `topk_group = num_expert_group` (semantically equivalent to global top-k with bias)
+   - Call aiter's `biased_grouped_topk` with the correct arguments instead of the PyTorch fallback
+   - Ensure the output format matches what downstream code expects (topk_weights, topk_ids)
+
+5. The server takes a long time to load MiniMax-M2.5 (8-way TP, 256 experts). Run `python3 /workspace/test_harness.py` and be patient - it may take 10-15 minutes for the server to become healthy.
+
+6. If the test fails, check server logs for errors. Common issues: wrong import path for aiter kernel, mismatched tensor shapes/dtypes, incorrect argument ordering.
+
+## Workflow
+
+1. **Read skills**: Read your `amd-kernel-optimization` and `gpu-profiling` skills for AMD-specific guidance.
+2. **Read the task description** at `/workspace/task_description.md` — it contains task-specific instructions, including which benchmark to run, environment details, and recommended approaches.
+3. **Baseline FIRST**: Run the benchmark IMMEDIATELY to establish the starting metric. Set a high `timeout` on the Shell tool (e.g. 600–1800s) for the first run since model loading can be slow. Do NOT spend time reading source code before you have a baseline number.
+4. **Profile**: Identify which implementations/backends are active from the benchmark logs when that is relevant (attention, MoE, all-reduce, etc.). If practical, profile with CUDA graphs disabled to get kernel-level breakdown.
+5. **Optimize**: If you have clear optimization opportunities from profiling, apply them one at a time and benchmark after each change. Revert immediately if performance regresses. Follow the skill docs and task description for recommended techniques.
+6. **Update state**: Write results to `/workspace/optimization_state.json` after each change.
+   Record `active_backends`, `hotspot_targets`, and `next_moves` when they are relevant and you know them.
+7. **Final benchmark**: Run the standard benchmark command as your LAST action.
+
+## Key Principles
+
+- **Run the benchmark EARLY** — get a baseline number within the first few minutes. Do NOT spend time on code exploration before having a metric.
+- Follow the task description's recommended approach first — it contains domain-specific guidance.
+- Do NOT modify the benchmark script or its parameters.
+- After making changes to compiled code, rebuild the affected package before benchmarking.
+- If the benchmark script sources a config file (e.g. `bench_config.env`), use it for backend configuration to ensure verification reproduces your setup.
+
+## Integrity Rules (MANDATORY)
+
+- Do NOT modify `test_harness.py` or the benchmark script.
+- Do NOT change benchmark parameters (warmup, iterations, batch size, input dimensions).
+- Do NOT redirect or filter benchmark output (no `grep`, no `| tail`).
+- The orchestrator independently re-runs the benchmark to verify your results. Any discrepancy between your claimed result and the verification run causes the trial to be marked as FAILED.
+- Achieve improvements through legitimate code changes only.
+
+## CRITICAL: Output Format
+
+Your LAST action before finishing MUST be running the benchmark command **directly** —
+do NOT pipe through `grep` or redirect output. The FULL benchmark output must appear
+in your output so the orchestrator can capture the metric via regex: `SCORE:\s+([\d.]+)`
+
+The output must include a line matching: `score: <value>`
+
+Without this line, the trial is recorded as a FAILURE even if you achieved great results.
+
+## State File
+
+After completing work, update `/workspace/optimization_state.json`:
+```json
+{
+  "job_name": "...",
+  "repo": "...",
+  "current_best_ms": 43.4,
+  "stages_completed": [...],
+  "current_stage": {
+    "stage": "<stage name>",
+    "current_best_ms": 41.2,
+    "active_backends": {
+      "attention": "<backend in use>",
+      "moe": "<backend in use>"
+    },
+    "hotspot_targets": [
+      {
+        "kernel": "<hottest kernel>",
+        "share_pct": 26.7,
+        "file": "<exact file path if known>",
+        "symbol": "<exact symbol/function if known>",
+        "backend": "<backend tied to this hotspot>",
+        "reason": "<why this hotspot matters>",
+        "next_step": "<next source-level change to try>"
+      }
+    ],
+    "next_moves": [
+      "<concrete next move>",
+      "<concrete next move>"
+    ],
+    "applied_optimizations": [
+      {
+        "name": "<technique>",
+        "impact_ms": -5.0,
+        "files_changed": ["<path>"],
+        "description": "<what changed>"
+      }
+    ],
+    "attempted_but_failed": [
+      {"name": "<technique>", "reason": "<why>", "error": "<snippet>"}
+    ],
+    "profiling_summary": {
+      "top_bottlenecks": ["<kernel> <pct>"],
+      "gpu_utilization": 0.72,
+      "kernel_breakdown": {"gemm": 61.0, "attention": 24.0}
+    },
+    "environment_changes": ["pip install <pkg>"],
+    "notes": ["<important learning from this trial>"]
+  }
+}
+```
+Prefer structured fields like `active_backends`, `hotspot_targets`, and `next_moves`
+for actionable handoff information when they are relevant to the task. Use `notes`
+for supporting detail, not as the only place where critical hotspot/file/symbol
+guidance is recorded.
+Prefer `next_moves` that point to concrete source-level changes tied to
+`hotspot_targets`; generic env-var/backend tuning should be secondary unless the
+profiling evidence specifically supports it.
+
+The file already exists when the trial starts. Preserve the existing top-level
+structure and update the `current_stage` section with what you learned in this
+trial. If you only know part of the state, add just those fields and leave the
+rest intact. The orchestrator merges this file into the next trial's prompt.

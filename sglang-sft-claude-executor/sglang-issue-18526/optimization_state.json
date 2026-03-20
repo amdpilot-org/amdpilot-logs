@@ -1,0 +1,75 @@
+{
+  "job_name": "sglang-issue-18526",
+  "repo": "https://github.com/sgl-project/sglang.git",
+  "initial_baseline_ms": 100.0,
+  "current_best_ms": 100.0,
+  "stages_completed": [
+    {
+      "stage": "stage1_diagnose_and_fix",
+      "baseline_ms": null,
+      "current_best_ms": 100.0,
+      "applied_optimizations": [
+        {
+          "name": "get_valid_kv_indices triton kernel for CUDA graph compatible KV index extraction",
+          "impact_ms": null,
+          "files_changed": [
+            "/sgl-workspace/sglang/python/sglang/srt/layers/attention/nsa/triton_kernel.py"
+          ],
+          "description": "Added a triton kernel `_get_valid_kv_indices_kernel` and wrapper `get_valid_kv_indices` that replaces the dynamic-shape boolean mask `page_table_1[page_table_1 != -1]` with fixed-shape operations (sum, cumsum, triton scatter). The kernel reads pre-computed CSR indptr offsets and scatters valid entries contiguously. All operations produce fixed-shape tensors, making them CUDA graph capturable.",
+          "technique_category": "",
+          "timestamp": ""
+        },
+        {
+          "name": "Fix _forward_aiter decode to use get_valid_kv_indices and correct mla_decode_fwd call",
+          "impact_ms": null,
+          "files_changed": [
+            "/sgl-workspace/sglang/python/sglang/srt/layers/attention/nsa_backend.py"
+          ],
+          "description": "Replaced the dynamic boolean mask in _forward_aiter with the new get_valid_kv_indices kernel. Pre-allocated kv_indices_buf and kv_indptr buffers in __init__. Removed the scalar assignment `kv_indptr[0] = 0` which was not allowed during CUDA graph capture (torch.zeros already initializes to 0). Fixed mla_decode_fwd call to use keyword arguments for sm_scale and removed unsupported logit_cap argument.",
+          "technique_category": "",
+          "timestamp": ""
+        },
+        {
+          "name": "Add aiter prefill implementation (_forward_aiter_prefill)",
+          "impact_ms": null,
+          "files_changed": [
+            "/sgl-workspace/sglang/python/sglang/srt/layers/attention/nsa_backend.py"
+          ],
+          "description": "Added _forward_aiter_prefill method that delegates to the tilelang sparse forward kernel (tilelang_sparse_fwd), which is already AMD GPU compatible. Added 'aiter' to the forward_extend dispatch logic and to _NSA_IMPL_T type alias.",
+          "technique_category": "",
+          "timestamp": ""
+        }
+      ],
+      "attempted_but_failed": [],
+      "profiling_summary": {
+        "top_bottlenecks": [],
+        "gpu_utilization": 0.0,
+        "memory_usage_gb": 0.0,
+        "kernel_breakdown": {},
+        "raw_profile_path": "",
+        "timestamp": ""
+      },
+      "active_backends": {
+        "nsa_prefill": "aiter",
+        "nsa_decode": "aiter"
+      },
+      "hotspot_targets": [],
+      "next_moves": [],
+      "environment_changes": [],
+      "notes": [
+        "Root cause 1: `page_table_1[page_table_1 != -1]` produces dynamic output shape, breaking CUDA graph capture",
+        "Root cause 2: `kv_indptr[0] = 0` scalar assignment not allowed during stream capture on HIP",
+        "Root cause 3: mla_decode_fwd positional args had type mismatch (float passed as page_size int)",
+        "Fix: Pre-compute indptr with fixed-shape ops (sum+cumsum), scatter with triton kernel using pre-computed offsets",
+        "The aiter prefill implementation reuses the existing tilelang sparse kernel which works on AMD GPUs",
+        "SCORE: 100 achieved - server starts with cudagraph capture and responds correctly"
+      ],
+      "started_at": "2026-03-19T11:59:03.739062",
+      "completed_at": "2026-03-19T13:10:19.481956"
+    }
+  ],
+  "current_stage": null,
+  "attempt_history": [],
+  "technique_attempts": {},
+  "global_notes": []
+}

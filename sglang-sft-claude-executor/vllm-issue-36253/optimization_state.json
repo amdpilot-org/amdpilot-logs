@@ -1,0 +1,66 @@
+{
+  "job_name": "vllm-issue-36253",
+  "repo": "https://github.com/vllm-project/vllm.git",
+  "initial_baseline_ms": 2182.81,
+  "current_best_ms": 2182.81,
+  "stages_completed": [
+    {
+      "stage": "stage1_implement_aiter_fast_path",
+      "baseline_ms": null,
+      "current_best_ms": 2182.81,
+      "applied_optimizations": [
+        {
+          "name": "aiter_biased_grouped_topk_fast_path",
+          "impact_ms": null,
+          "files_changed": [
+            "/usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/fused_moe/router/fused_topk_bias_router.py"
+          ],
+          "description": "Added fast path in fused_topk_bias for sigmoid scoring with bias correction on ROCm+aiter. Computes num_expert_group as smallest divisor of num_experts such that num_experts/num_expert_group<=32 (e.g. 8 for 256 experts). Routes to rocm_aiter_grouped_topk which calls aiter's biased_grouped_topk kernel instead of slow PyTorch fallback ops.",
+          "technique_category": "",
+          "timestamp": ""
+        }
+      ],
+      "attempted_but_failed": [],
+      "profiling_summary": {
+        "top_bottlenecks": [],
+        "gpu_utilization": 0.0,
+        "memory_usage_gb": 0.0,
+        "kernel_breakdown": {},
+        "raw_profile_path": "",
+        "timestamp": ""
+      },
+      "active_backends": {
+        "attention": "aiter_pa_v1",
+        "moe": "aiter_fmoe_fp8_blockscale"
+      },
+      "hotspot_targets": [
+        {
+          "kernel": "fused_topk_bias",
+          "share_pct": 0.0,
+          "file": "/usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/fused_moe/router/fused_topk_bias_router.py",
+          "symbol": "fused_topk_bias",
+          "backend": "aiter biased_grouped_topk",
+          "reason": "Was using slow PyTorch fallback for biased top-k routing with 256 experts, now uses aiter kernel",
+          "next_step": "Optimization complete - aiter fast path implemented"
+        }
+      ],
+      "next_moves": [],
+      "environment_changes": [],
+      "notes": [
+        "Scores achieved: 2196.67, 2212.29, 2200.49 tok/s across 3 runs with aiter fast path",
+        "MiniMax-M2.5 has 256 experts, num_expert_group=8 computed (256/8=32 experts per group)",
+        "topk_group=num_expert_group=8 makes it semantically equivalent to global top-k with bias",
+        "The aiter biased_grouped_topk kernel dispatches to either biased_grouped_topk_hip or moe_fused_gate based on token count",
+        "Key change: in fused_topk_bias(), when aiter is enabled (is_fused_moe_enabled() returns True) and scoring_func=='sigmoid' with e_score_correction_bias, route to rocm_aiter_grouped_topk instead of falling through to the slow torch.topk + gather path",
+        "Helper function _compute_num_expert_group() finds smallest divisor satisfying the 32-experts-per-group limit",
+        "IMPORTANT: test harness must be run with PATH=/usr/bin:$PATH so python3 resolves to python3.12 (which has vllm)"
+      ],
+      "started_at": "2026-03-19T16:54:47.705576",
+      "completed_at": "2026-03-19T17:21:06.487623"
+    }
+  ],
+  "current_stage": null,
+  "attempt_history": [],
+  "technique_attempts": {},
+  "global_notes": []
+}

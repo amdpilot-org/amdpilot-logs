@@ -1,0 +1,1 @@
+{"trial": 1, "stage": "stage1_implement_aiter_fast_path", "elapsed_s": 1313, "metric_name": "score", "metric_value": "2182.81", "image": "sglang-issue-36253:base", "job": "vllm-issue-36253", "run_id": "", "status": "verified", "metric_source": "verification_run", "verified_metric": 2182.81, "failure_reason": "", "extra": {}, "score": "2182.81"}
