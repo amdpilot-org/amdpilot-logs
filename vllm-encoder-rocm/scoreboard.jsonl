@@ -1,1 +1,0 @@
-{"trial": 1, "stage": "stage1_fix_encoder_self_attention", "elapsed_s": 345, "metric_name": "score", "metric_value": "100.00", "image": "amdpilot-eval-vllm-encoder-rocm", "job": "vllm-encoder-rocm", "run_id": "", "status": "verified", "metric_source": "verification_run", "verified_metric": 100.0, "failure_reason": "", "extra": {}, "score": "100.00"}
