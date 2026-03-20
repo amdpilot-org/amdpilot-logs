@@ -1,0 +1,153 @@
+# Task: Fix RotaryEmbedding crashes on ROCm with CUDA_HOME not found error on AMD GPU -- Stage1 Fix Rotary Embedding Rocm Dispatch
+
+## Starting Point
+
+You are starting from a **clean environment**.
+- Base image: `amdpilot-eval-sglang-rotary-crash`
+- Repo cloned at `/workspace/` from `https://github.com/sgl-project/sglang.git`
+- **CHECK FIRST**: Run `ls /workspace/` to see if a previous trial left benchmark scripts or results. Reuse them if they exist.
+
+## Task Description
+
+# RotaryEmbedding fails on ROCm with CUDA_HOME error
+
+ROCm CI fails during runtime initialization. On HIP, `RotaryEmbedding` dispatches through `MultiPlatformOp` and hits a fallback path that JIT-compiles with `cuda_files`. In ROCm-only environments, this triggers CUDA toolchain discovery and fails with:
+
+```
+RuntimeError: Could not find CUDA installation. Please set CUDA_HOME environment variable.
+```
+
+This breaks ALL models on ROCm since every model uses rotary embeddings.
+
+Failing CI links:
+- 2-GPU accuracy
+- 1-GPU unit tests
+- VLM accuracy and performance
+
+## Affected File
+
+- `python/sglang/srt/layers/rotary_embedding.py`
+
+## Environment
+
+- SGLang at `/workspace/sglang`
+- Use `/opt/venv/bin/python3`
+
+## Verification
+
+```bash
+/opt/venv/bin/python3 /workspace/test_harness.py
+```
+
+## Pipeline State
+
+
+### Current stage carry-over: stage1_fix_rotary_embedding_rocm_dispatch
+
+## Execution Environment
+
+You are running inside a Docker container with ROCm, PyTorch, and GPU access.
+All commands run directly in this container — no `docker exec` needed.
+- Repo at `/workspace/`
+
+## Goal
+
+Fix the issue described above. Verify the fix is correct and does not introduce regressions.
+Run the verification command and ensure all checks pass: `/opt/venv/bin/python3 /workspace/test_harness.py`
+
+## Stage Hints
+
+1. Examine /workspace/sglang/python/sglang/srt/layers/rotary_embedding.py to understand the MultiPlatformOp dispatch logic. 2. Identify where the code falls back to cuda_files JIT compilation on HIP devices. 3. Fix the dispatch to use HIP-compatible code paths (hip_files or precompiled kernels) instead of triggering CUDA toolchain discovery. 4. Check for similar patterns in related files that might have the same issue. 5. Run /opt/venv/bin/python3 /workspace/test_harness.py to verify the fix resolves the crash and achieves a score of 100.
+
+## Workflow
+
+1. **Read the task**: Read `/workspace/task_description.md` for full bug details
+2. **Reproduce**: Run the failing command/test to confirm the issue exists
+3. **Diagnose**: Read error traces, find the root cause in the source code
+4. **Fix**: Apply the minimum necessary fix — do not refactor unrelated code
+5. **Verify**: Run the test harness to confirm the fix works
+6. **Regression check**: Ensure the fix doesn't break other functionality
+7. **Update state**: Write results to `/workspace/optimization_state.json`
+
+## Integrity Rules (MANDATORY)
+
+- Do NOT modify `test_harness.py` or the benchmark script.
+- Do NOT change benchmark parameters (warmup, iterations, batch size, input dimensions).
+- Do NOT redirect or filter benchmark output (no `grep`, no `| tail`).
+- The orchestrator independently re-runs the benchmark to verify your results. Any discrepancy between your claimed result and the verification run causes the trial to be marked as FAILED.
+- Achieve improvements through legitimate code changes only.
+
+## CRITICAL: Output Format
+
+Your LAST action before finishing MUST be running the benchmark command **directly** —
+do NOT pipe through `grep` or redirect output. The FULL benchmark output must appear
+in your output so the orchestrator can capture the metric via regex: `SCORE:\s+([\d.]+)`
+
+The output must include a line matching: `score: <value>`
+
+Without this line, the trial is recorded as a FAILURE even if you achieved great results.
+
+## State File
+
+After completing work, update `/workspace/optimization_state.json`:
+```json
+{
+  "job_name": "...",
+  "repo": "...",
+  "current_best_ms": 43.4,
+  "stages_completed": [...],
+  "current_stage": {
+    "stage": "<stage name>",
+    "current_best_ms": 41.2,
+    "active_backends": {
+      "attention": "<backend in use>",
+      "moe": "<backend in use>"
+    },
+    "hotspot_targets": [
+      {
+        "kernel": "<hottest kernel>",
+        "share_pct": 26.7,
+        "file": "<exact file path if known>",
+        "symbol": "<exact symbol/function if known>",
+        "backend": "<backend tied to this hotspot>",
+        "reason": "<why this hotspot matters>",
+        "next_step": "<next source-level change to try>"
+      }
+    ],
+    "next_moves": [
+      "<concrete next move>",
+      "<concrete next move>"
+    ],
+    "applied_optimizations": [
+      {
+        "name": "<technique>",
+        "impact_ms": -5.0,
+        "files_changed": ["<path>"],
+        "description": "<what changed>"
+      }
+    ],
+    "attempted_but_failed": [
+      {"name": "<technique>", "reason": "<why>", "error": "<snippet>"}
+    ],
+    "profiling_summary": {
+      "top_bottlenecks": ["<kernel> <pct>"],
+      "gpu_utilization": 0.72,
+      "kernel_breakdown": {"gemm": 61.0, "attention": 24.0}
+    },
+    "environment_changes": ["pip install <pkg>"],
+    "notes": ["<important learning from this trial>"]
+  }
+}
+```
+Prefer structured fields like `active_backends`, `hotspot_targets`, and `next_moves`
+for actionable handoff information when they are relevant to the task. Use `notes`
+for supporting detail, not as the only place where critical hotspot/file/symbol
+guidance is recorded.
+Prefer `next_moves` that point to concrete source-level changes tied to
+`hotspot_targets`; generic env-var/backend tuning should be secondary unless the
+profiling evidence specifically supports it.
+
+The file already exists when the trial starts. Preserve the existing top-level
+structure and update the `current_stage` section with what you learned in this
+trial. If you only know part of the state, add just those fields and leave the
+rest intact. The orchestrator merges this file into the next trial's prompt.

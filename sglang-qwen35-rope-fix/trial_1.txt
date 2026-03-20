@@ -1,0 +1,220 @@
+• Let me start by understanding the task and the current state. I need to:
+
+  1. First run the test harness to see the exact errors
+  2. Examine the affected files for the RoPE scaling and cuda import issues
+  3. Fix both issues
+  4. Verify with the test harness
+
+  Let me start by running the test harness to see the errors.
+•
+• Used Shell (/opt/venv/bin/python3 /wo...pace/test_harness.py 2>&1)
+  Failed with exit code: 1
+• Good, I can see the test harness results. Bug 1 (RoPE config) is passing, but
+  Bug 2 (CuTe-DSL import) is failing with ModuleNotFoundError: No module named '
+  cuda'. Let me examine the affected files to understand the issues better.
+
+  Let me first look at the hybrid_linear_attn_backend.py file to see the cuda im
+  port issue.
+•
+• Used ReadFile (sglang/python/sglang/srt/...id_linear_attn_backend.py)
+•
+• Used ReadFile (sglang/python/sglang/srt/configs/qwen3_5.py)
+• Now I need to understand the issue better. The test harness shows that Bug 1 (
+  RoPE config) is passing, but Bug 2 (CuTe-DSL import) is failing with ModuleNot
+  FoundError: No module named 'cuda'.
+
+  Looking at the hybrid_linear_attn_backend.py file, I see on line 48-50:
+
+  if not is_cpu() and not is_npu():
+      # fix import error on CPU device, no impacts when non-CPU path
+      from sglang.jit_kernel.cutedsl_gdn import (
+          cutedsl_fused_sigmoid_gating_delta_rule_update,
+      )
+
+  The issue is that this import is happening unconditionally for non-CPU/non-NPU
+  devices (which includes AMD ROCm). The cutedsl_gdn module likely has a cuda im
+  port that doesn't exist on ROCm.
+
+  Let me check the cutedsl_gdn module to see what's happening:
+•
+• Used Glob (**/cutedsl_gdn.py)
+  Unsafe pattern
+• Let me search for the cutedsl_gdn file more specifically.
+•
+• Used Glob (sglang/jit_kernel/cutedsl_gdn.py)
+• Let me search more broadly for cutedsl files.
+•
+• Used Shell (find /workspace/sglang -n...e "*cutedsl*" 2>/dev/null)
+• Found it. Let me read the cutedsl_gdn.py file to see what imports are causing
+  the issue.
+•
+• Used ReadFile (sglang/python/sglang/jit_kernel/cutedsl_gdn.py)
+• Now I can see the issue. On line 6 of cutedsl_gdn.py:
+
+  import cuda.bindings.driver as cuda
+
+  This cuda.bindings module is NVIDIA-specific and doesn't exist on AMD ROCm. Th
+  e fix should be to make this import conditional based on whether we're on CUDA
+  or ROCm.
+
+  Looking at the hybrid_linear_attn_backend.py file, I see that the import of cu
+  tedsl_fused_sigmoid_gating_delta_rule_update happens on line 48-50:
+
+  if not is_cpu() and not is_npu():
+      # fix import error on CPU device, no impacts when non-CPU path
+      from sglang.jit_kernel.cutedsl_gdn import (
+          cutedsl_fused_sigmoid_gating_delta_rule_update,
+      )
+
+  The issue is that this condition doesn't exclude AMD ROCm. We need to check if
+  there's an is_cuda() function that we can use.
+
+  Looking at line 57, I see:
+
+  if is_cuda():
+      from sglang.srt.layers.attention.mamba.causal_conv1d import (
+          causal_conv1d_fn as causal_conv1d_fn_cuda,
+      )
+
+  So there is an is_cuda() function. Let me check the is_cuda function to unders
+  tand what it does.
+•
+• Used Grep (def is_cuda)
+• Now I understand the issue. The is_cuda() function checks for torch.version.cu
+  da, which is specific to NVIDIA CUDA. On AMD ROCm, torch.version.hip is set in
+  stead.
+
+  The fix needs to:
+
+  1. In hybrid_linear_attn_backend.py, change the condition from if not is_cpu()
+     d not is_npu(): to also exclude ROCm (or specifically check for CUDA).
+  2. The CuTe DSL kernels use cuda.bindings which is NVIDIA-specific, so they sh
+     d only be imported on CUDA.
+
+  Let me also check if there's an is_hip() function:
+•
+• Used Grep (def is_hip)
+• Good, there's an is_hip() function in /workspace/sglang/python/sglang/srt/util
+  s/common.py. Now let me look at the imports in hybrid_linear_attn_backend.py t
+  o see what's imported from common.py:
+•
+• Used ReadFile (sglang/python/sglang/srt/utils/common.py)
+• Let me check what functions are exported from common.py:
+•
+• Used Grep (^def |^from |^import )
+• Good. Now I see that is_cuda() and is_hip() are both available from sglang.srt
+  .utils.common. Looking at the hybrid_linear_attn_backend.py file again, it imp
+  orts from sglang.srt.utils on line 43:
+
+  from sglang.srt.utils import cpu_has_amx_support, is_cpu, is_cuda, is_npu
+
+  But it doesn't import is_hip. The fix should be to:
+
+  1. Import is_hip from sglang.srt.utils
+  2. Change the condition from if not is_cpu() and not is_npu(): to if is_cuda()
+     since the CuTe DSL kernels are CUDA-specific)
+
+  Let me look at the test harness to understand what it's testing:
+•
+• Used ReadFile (test_harness.py)
+• Now I understand the test harness. It:
+
+  1. Tests Bug 1: Importing Qwen3_5MoeTextConfig and creating a config with rope
+     rameters
+  2. Tests Bug 2: Importing hybrid_linear_attn_backend.py without crashing on cu
+     bindings
+
+  The test harness shows that Bug 1 is passing but Bug 2 is failing. The fix nee
+  ds to be in hybrid_linear_attn_backend.py to avoid importing the CuTe DSL modu
+  le (which imports cuda.bindings) on ROCm.
+
+  Let me now fix the hybrid_linear_attn_backend.py file. The fix should:
+
+  1. Import is_hip from sglang.srt.utils
+  2. Change the condition from if not is_cpu() and not is_npu(): to if is_cuda()
+     ince CuTe DSL is CUDA-specific
+
+  Let me make this change:
+• Now I understand the issue. The hybrid_linear_attn_backend.py file imports CuT
+  e DSL kernels unconditionally for non-CPU/non-NPU devices, but CuTe DSL uses c
+  uda.bindings which is NVIDIA-specific and doesn't exist on AMD ROCm.
+
+  Let me fix the import condition in hybrid_linear_attn_backend.py:
+• Used StrReplaceFile (sglang/python/sglang/srt/...id_linear_attn_backend.py)
+• Good, now let me run the test harness again to verify the fix:
+• Now let me verify the fix by running the test harness:
+• Used Shell (/opt/venv/bin/python3 /wo...pace/test_harness.py 2>&1)
+• All 4 checks pass now. The fix is working. Let me update the optimization stat
+  e file to reflect the completed stage.
+• All tests pass. Now let me update the optimization state file:
+• Used ReadFile (optimization_state.json)
+• Now let me update the state file to reflect the completed stage with the fix a
+  pplied.
+•
+• Used StrReplaceFile (optimization_state.json)
+• Let me verify the state file looks correct:
+•
+• Used ReadFile (optimization_state.json)
+• The state file looks good. Let me run the test harness one more time to confir
+  m everything is working correctly:
+• Let me run the test harness one final time to confirm the fix:
+• Used Shell (/opt/venv/bin/python3 /wo...pace/test_harness.py 2>&1)
+• All tests pass with a score of 100.0. The fix is complete.
+
+  Summary of the fix:
+
+  1. In hybrid_linear_attn_backend.py, I changed the import condition from if no
+     s_cpu() and not is_npu(): to if is_cuda(): to avoid importing CuTe DSL kern
+     on ROCm.
+  2. I also added is_hip to the imports and created a separate ROCm path that im
+     ts the FLA kernels without the CuTe DSL dependency.
+
+  The root cause was that CuTe DSL kernels use cuda.bindings.driver which is NVI
+  DIA-specific and doesn't exist on AMD ROCm. By making the import conditional o
+  n is_cuda(), we avoid this import error on ROCm while still allowing CUDA syst
+  ems to use the CuTe DSL optimizations.
+• All tests pass with SCORE: 100.0.
+
+  Summary
+
+  Fixed the ModuleNotFoundError: No module named 'cuda' error in hybrid_linear_a
+  ttn_backend.py on AMD ROCm.
+
+  Root Cause
+
+  The CuTe DSL kernels (sglang.jit_kernel.cutedsl_gdn) import cuda.bindings.driv
+  er, which is NVIDIA-specific and unavailable on AMD ROCm. The original code im
+  ported these kernels unconditionally for all non-CPU/non-NPU devices.
+
+  Fix Applied
+
+  Changed the import condition in /workspace/sglang/python/sglang/srt/layers/att
+  ention/hybrid_linear_attn_backend.py:
+
+  • Before: if not is_cpu() and not is_npu(): - imported CuTe DSL on both CUDA a
+    ROCm
+  • After: if is_cuda(): - imports CuTe DSL only on CUDA; ROCm uses FLA kernels
+    thout CuTe DSL dependency
+
+  Test Results
+
+  • Bug 1 (RoPE config): ✅ PASS (was already working)
+  • Bug 2 (CuTe-DSL import): ✅ PASS (fixed)
+  • Final Score: 100.0 (4/4 checks)
+• The task has been completed successfully. Let me verify by running the test ha
+  rness one final time to confirm all tests pass with SCORE: 100.0. The fix I ap
+  plied addressed the ModuleNotFoundError for 'cuda' on ROCm by making the CuTe
+  DSL import conditional on is_cuda() instead of the broader condition.
+
+  The test harness shows:
+
+  • Bug 1 (RoPE config): PASS - This was already working
+  • Bug 2 (CuTe-DSL import): PASS - Fixed by my change
+
+  All 4/4 checks pass with SCORE: 100.0
+
+  The optimization_state.json has been updated with the completed stage and fix
+  details.
+
+  I should choose STOP since the task is complete.
+• <choice>STOP</choice>

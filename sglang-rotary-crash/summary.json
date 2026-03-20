@@ -1,0 +1,31 @@
+{
+  "job": "sglang-rotary-crash",
+  "type": "bugfix",
+  "best_metric": "100.00",
+  "metric_name": "score",
+  "metric_direction": "higher",
+  "total_elapsed_s": 325,
+  "stages_completed": 1,
+  "total_trials": 1,
+  "failures": 0,
+  "trials": [
+    {
+      "trial": 1,
+      "stage": "stage1_fix_rotary_embedding_rocm_dispatch",
+      "metric": "100.00",
+      "elapsed_s": 258,
+      "verified": true,
+      "verified_metric": 100.0,
+      "supervisor_action": "stop",
+      "supervisor_analysis": "The task is complete. The agent successfully fixed the RotaryEmbedding ROCm/HIP dispatch issue by adding a forward_hip() method that routes to forward_native() instead of forward_cuda(), fixing the use_fallback_kernel condition to be CUDA-specific, and adding proper device handling in forward_native(). All 3 test checks pass with SCORE: 100.0.",
+      "nudge": {
+        "polls": 4,
+        "noops": 4,
+        "nudges_sent": 0,
+        "nudges": [],
+        "last_step": 20,
+        "latest_status": "tool: <system>File successfully overwritten. Current size: 1937 bytes.</system>"
+      }
+    }
+  ]
+}
