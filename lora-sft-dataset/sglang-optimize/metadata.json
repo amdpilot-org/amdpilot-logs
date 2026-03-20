@@ -1,0 +1,9 @@
+{
+  "source_task": "sglang-19228-kimi-moe-tune",
+  "task_type": "optimize",
+  "score": 79.1,
+  "executor_model": "Claude Opus 4.6",
+  "num_turns": 98,
+  "num_tool_calls": 105,
+  "num_messages": 203
+}

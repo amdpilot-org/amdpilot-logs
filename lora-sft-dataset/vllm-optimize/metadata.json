@@ -1,0 +1,9 @@
+{
+  "source_task": "vllm-skinny-gemm-pad",
+  "task_type": "optimize",
+  "score": 100.0,
+  "executor_model": "Claude Opus 4.6",
+  "num_turns": 88,
+  "num_tool_calls": 90,
+  "num_messages": 178
+}
