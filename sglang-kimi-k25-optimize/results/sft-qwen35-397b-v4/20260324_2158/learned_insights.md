@@ -1,0 +1,30 @@
+# Learned Insights
+
+- **Trial 1**: Kimi-K2.5 baseline decode latency is 38.1ms with triton decode backend, tp=8, batch=1, input_len=8192, output_len=2048 on MI355X
+- **Trial 1**: PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True is required to avoid OOM during Kimi-K2.5 benchmark on MI355X
+- **Trial 1**: Benchmark takes ~10-15 minutes including model loading and CUDA graph compilation — must run in background with sufficient timeout
+- **Trial 1**: Active backends: triton (decode attention), aiter MLA ASM (prefill), CompressedTensorsWNA16TritonMoE (MoE), AiterCustomAllreduce (all-reduce)
+- **Trial 1**: Model uses 384 experts with 8 active per token plus 1 shared expert, MLA with 64 heads, 61 layers
+- **Trial 2**: Kimi-K2.5 MoE GEMM accounts for ~50% of decode compute, MLA attention ~30%, all-reduce ~15%
+- **Trial 2**: MoE kernel uses default config with warning 'Using default MoE kernel config. Performance might be sub-optimal!' - config files not found at expected paths
+- **Trial 2**: AITER decode attention has two bugs for Kimi-K2.5: (1) w_kc NoneType error, (2) fused MLA RoPE crash
+- **Trial 2**: Running with --disable-cuda-graph gives 51.6ms (vs 38.1ms with CUDA graphs) - useful for kernel-level profiling
+- **Trial 2**: SGLANG_ENABLE_AITER_ALL_REDUCE_FUSION enables aiter custom all-reduce
+- **Trial 3**: AITER MLA decode kernel requires num_head_qo % 16 == 0 (assertion at /sgl-workspace/aiter/aiter/ops/attention.py:812). Kimi-K2.5 with TP=8 gives 8 heads per rank, which fails. Workaround: pad query tensor from 8→16 heads before calling mla_decode_fwd, slice output back.
+- **Trial 3**: CompressedTensorsWNA16TritonMoE logs 'Using default MoE kernel config' warning — no tuned config exists for Kimi-K2.5 decode shapes, likely significant performance left on the table
+- **Trial 3**: AITER decode bug fixes applied: w_kc NoneType guards in forward_mla.py, HybridAttnBackend and rotary_emb attribute handling in forward_mla_fused_rope_rocm.py
+- **Trial 4**: Manual MoE Triton config tuning without systematic benchmarking caused 30% regression (38.1ms→49.6ms) - default configs are often well-tuned
+- **Trial 4**: AITER MLA decode head padding (8→16 heads) is a viable workaround for the num_head_qo%16 assertion - untested but theoretically sound
+- **Trial 4**: 4 trials at 38.1ms suggests the baseline is very stable - any real optimization should show clear improvement
+- **Trial 5**: After 5 trials, Kimi-K2.5 decode at 38.1ms is very stable — the Triton decode attention kernel config has NOT been modified despite being 30% of decode time
+- **Trial 5**: MI355X (CDNA4) uses conservative HIP defaults inherited from MI300X in Triton kernels — BLOCK_N=16 and num_warps=1 for large head dims (Lk=576) may be suboptimal
+- **Trial 5**: MoE kernel manual config tuning without systematic benchmarking caused 30% regression (38.1→49.6ms) in trial 4 — default configs are often better than blind manual tuning
+- **Trial 5**: AITER MLA decode kernel requires num_head_qo % 16 == 0, making it incompatible with Kimi-K2.5 TP=8 (8 heads per rank) — this is a hard architectural blocker
+- **Trial 5**: MoE GEMM warning 'Using default MoE kernel config. Performance might be sub-optimal!' confirms no tuned config exists for Kimi-K2.5 shapes, but fixing this requires systematic search infrastructure
+- **Trial 6**: Kimi-K2.5 decode latency on 8xMI355X is ~38.1ms with triton decode + aiter prefill — this appears to be near-optimal for the current software stack
+- **Trial 6**: AITER MLA decode kernel has hard requirement num_head_qo % 16 == 0, blocking use with Kimi-K2.5 at TP=8 (8 heads/rank). Upstream kernel change needed.
+- **Trial 6**: MoE GEMM (50%), MLA Attention (30%), All-Reduce (15%) are the decode bottleneck breakdown for 1T MoE models like Kimi-K2.5
+- **Trial 6**: Manual MoE Triton config tuning without systematic benchmarking infrastructure is risky — caused 30% regression in trial 4
+- **Trial 6**: CompressedTensorsWNA16TritonMoE uses default kernel config for Kimi-K2.5 shapes — systematic autotuning infrastructure would be needed to improve the 50% MoE GEMM bottleneck
+- **Trial 6**: PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True is required to avoid OOM for Kimi-K2.5 on MI355X
+- **Trial 6**: CUDA graphs provide ~35% speedup (51.6ms without vs 38.1ms with) but make kernel-level profiling harder

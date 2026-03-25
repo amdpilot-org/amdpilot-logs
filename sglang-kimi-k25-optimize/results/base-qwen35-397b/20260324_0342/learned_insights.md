@@ -1,0 +1,21 @@
+# Learned Insights
+
+- **Trial 1**: Kimi-K2.5 baseline decode latency is 38.4ms with triton decode backend on 8x MI355X, TP=8, batch=1, input_len=8192, output_len=2048
+- **Trial 1**: Active backends: triton (decode attention), aiter (prefill attention), CompressedTensorsWNA16TritonMoE (MoE on ROCm), AiterCustomAllreduce (all-reduce)
+- **Trial 1**: Decode hotspots: MoE kernel ~40%, MLA attention ~35%, all-reduce ~15%
+- **Trial 1**: Model uses WNA16 quantization (weights int16, activation BF16)
+- **Trial 1**: First run takes ~2 minutes for model loading + CUDA graph capture
+- **Trial 1**: AITER decode backend has known bugs: w_kc absorption in forward_mla.py and missing attributes in forward_mla_fused_rope_rocm.py
+- **Trial 2**: AITER MLA decode kernel requires num_head_qo >= 16 per GPU. With Kimi-K2.5 (64 heads) at TP=8, each GPU has 8 heads, making AITER decode fundamentally incompatible without head padding
+- **Trial 2**: Head padding approach (8->16 heads) for AITER MLA decode hangs during CUDA graph capture or kernel initialization - needs extensive debugging beyond just padding tensors
+- **Trial 2**: torch.compile provides no measurable improvement for Kimi-K2.5 decode phase (38.3ms vs 38.32ms)
+- **Trial 2**: MoE config file path for Triton on ROCm: /sgl-workspace/sglang/python/sglang/srt/layers/moe/fused_moe_triton/configs/triton_3_6_0/E=384,N=2048,device_name=AMD_Instinct_MI355X,dtype=int8_w8a16.json
+- **Trial 2**: For batch=1 MoE decode with 8 active experts, each expert processes M=1 token, so BLOCK_SIZE_M should be very small (16) to avoid wasting compute
+- **Trial 3**: Kimi-K2.5 decode latency on 8x MI355X with TP=8 has a floor around 38.3ms with current software stack — MoE config tuning, torch.compile, and AITER decode all failed to provide meaningful improvement
+- **Trial 3**: The 28.72ms target (25% below baseline) was unrealistic for config-level tuning alone — would require fundamental kernel rewrites or new backend support
+- **Trial 3**: AITER MLA decode kernel has a hard requirement of num_head_qo >= 16 per GPU, making it incompatible with any model that has fewer than 16*TP attention heads (Kimi-K2.5 has 64 heads, so TP>=5 breaks it)
+- **Trial 3**: Head padding workaround for AITER MLA decode (8->16 heads) hangs during CUDA graph capture — the kernel metadata/buffer allocation likely has deeper assumptions beyond just tensor shape
+- **Trial 3**: MoE Triton kernel BLOCK_SIZE_M 32->16 for M=1 batch gives only ~0.1ms (0.26%) improvement on MI355X — diminishing returns from tile size tuning alone
+- **Trial 3**: For WNA16 MoE on ROCm, the Triton kernel config file is at configs/triton_3_6_0/E=384,N=2048,device_name=AMD_Instinct_MI355X,dtype=int8_w8a16.json
+- **Trial 3**: Triton decode attention kernel tuning (waves_per_eu, matrix_instr_nonkdim, kpack, num_stages) showed no measurable improvement in trial 3
+- **Trial 3**: To achieve >10% decode latency improvement on this model, likely need: (1) custom MoE kernel for WNA16 on MI355X, (2) fused MoE+all-reduce overlap, or (3) alternative attention backend that supports GQA<16

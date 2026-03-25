@@ -1,0 +1,388 @@
+# Task: Optimize Optimize SGLang serving throughput for Qwen3-VL-8B-Instruct on AMD MI355X to match vLLM on AMD GPU -- Stage2 Optimize Round1
+
+## Starting Point
+
+You are continuing from **stage1_baseline_and_profile** which already has changes applied.
+- Previous best: **1723.83** output_throughput_tok_s
+- The benchmark script and model code already work. Do NOT rewrite them from scratch.
+- **READ** `/workspace/optimization_state.json` first.
+- Run the existing benchmark first to confirm your starting point.
+
+## Task Description
+
+# Qwen3-VL Triton Attention Throughput Regression Fix
+
+Fix the triton attention backend throughput regression in SGLang when serving Qwen3-VL-8B-Instruct on AMD MI355X.
+
+## Problem — Triton Attention Regression
+
+SGLang v0.5.9 (ROCm 7.2.0, MI355X) with `--attention-backend triton` shows a **33% throughput regression** vs vLLM on the same workload:
+
+| Backend | Output Throughput (tok/s) | TPOT (ms) | E2E Latency p50 (ms) | TTFT p50 (ms) |
+|---------|--------------------------|-----------|----------------------|---------------|
+| SGLang triton | 1235.85 | 12.21 | 25786 | 1134 |
+| SGLang OAI chat | 1115.81 | 13.29 | 29223 | 1267 |
+| **vLLM (target)** | **1648.09** | **9.09** | **19385** | **1275** |
+
+The regression is concentrated in **decode throughput**: TPOT 12.21ms (SGLang triton) vs 9.09ms (vLLM) — a 34% gap. Prefill (TTFT ~1100-1275ms) is comparable.
+
+## CRITICAL CONSTRAINTS
+
+1. **The benchmark uses `--attention-backend triton`. This is LOCKED and cannot be changed.** The regression is specifically in the triton attention path on AMD. Switching to the aiter backend is NOT an acceptable fix — it bypasses the regression without fixing it.
+
+2. **Do NOT modify the benchmark script** (`bench_qwen_vl.sh`) or its parameters.
+
+3. **Do NOT set `ATTENTION_BACKEND` in `bench_config.env`.** The benchmark ignores this variable — the backend is hardcoded to triton.
+
+4. The fix must be source-level changes to SGLang's triton attention kernels, model code, scheduler, or memory management — changes that make the triton path faster.
+
+## Deliverable
+
+**A clean git commit on a `fix/qwen-vl-throughput` branch in `/workspace/sglang-fork/`** containing source-level changes that bring triton-backend throughput to ≥1600 tok/s.
+
+## Environment
+
+- **Installed SGLang runtime**: `/sgl-workspace/sglang/` — on `sys.path`, used by `python3 -m sglang.*`. **Edit files HERE to modify SGLang behavior.**
+- **SGLang fork checkout**: `/workspace/sglang-fork/` — clone of `github.com/Arist12/sglang` for creating the fix branch after optimization.
+- **Model weights**: `Qwen/Qwen3-VL-8B-Instruct` cached at `/root/.cache/huggingface`.
+- **Benchmark script**: `/workspace/bench_qwen_vl.sh` — starts server with triton backend, runs warmup + benchmark, reports output throughput.
+
+## Benchmark
+
+The benchmark runs a full serving workload (self-contained):
+1. Starts SGLang server with `--attention-backend triton` (hardcoded)
+2. Waits for server health
+3. Runs 128 image-prompt requests as warmup (results discarded)
+4. Runs 128 image-prompt requests as the actual measurement
+5. Reports: `Output throughput (tok/s): <value> | concurrency=16 model=Qwen3-VL-8B`
+
+First run takes 15–25 minutes (model loading + CUDA graph compilation + warmup + benchmark). Set `timeout: 2400` or higher when running it. Do NOT use timeout < 2000.
+
+### Quick iteration
+
+For faster feedback during development, you can start the server manually and run `bench_serving` directly with fewer prompts:
+
+```bash
+# Start server (background) — MUST use triton
+SGLANG_DISABLE_CUDNN_CHECK=1 /opt/venv/bin/python3 -m sglang.launch_server \
+    --model-path Qwen/Qwen3-VL-8B-Instruct \
+    --host 0.0.0.0 --port 30000 --trust-remote-code \
+    --attention-backend triton &
+
+# Quick test with 32 prompts
+/opt/venv/bin/python3 -m sglang.bench_serving --backend sglang \
+    --model Qwen/Qwen3-VL-8B-Instruct --dataset-name image \
+    --num-prompts 32 --random-input-len 4000 --random-output-len 2000 \
+    --random-range-ratio 1.0 --image-count 1 --image-resolution 720p \
+    --image-content random --max-concurrency 16 --seed 123 --warmup-requests 0
+```
+
+Use the full benchmark script (`bash /workspace/bench_qwen_vl.sh`) for the final measurement.
+
+## Target
+
+Bring triton-backend output throughput to **≥1600 tok/s** (vLLM achieves 1648 tok/s on the identical workload with its own attention implementation). Current SGLang triton baseline is ~1235 tok/s — this is a 30% gap to close.
+
+## Suggested Investigation Areas
+
+The decode path is where the regression lives (TPOT 12.21ms vs 9.09ms). Focus here:
+
+1. **Triton attention kernel tuning**: The triton decode attention kernels in `sglang/srt/layers/attention/triton_ops/` may have suboptimal tile sizes, num_kv_splits, or memory access patterns for MI355X. Profile with `rocprof` to find the hotspot kernels. Check `triton_attention_num_kv_splits` and `triton_attention_reduce_in_fp32` server args.
+
+2. **CUDA graph overhead**: VL models may have variable input shapes that cause excessive CUDA graph recompilation or suboptimal graph capture. Check `sglang/srt/layers/attention/triton_backend.py` for how CUDA graphs interact with the triton attention path.
+
+3. **Vision token handling in decode**: During batched decode with image tokens, the KV cache access pattern may differ from text-only. Check if the triton attention kernel handles multimodal KV entries efficiently.
+
+4. **Scheduling inefficiency**: Image requests with many vision tokens may cause the scheduler to create suboptimal batches during decode. Check `sglang/srt/managers/schedule_batch.py`.
+
+5. **Memory fragmentation**: Multimodal tokens may cause memory fragmentation in the KV cache, leading to non-contiguous memory access during triton attention. Check `sglang/srt/mem_cache/`.
+
+6. **torch.compile and triton interaction**: Check if `torch.compile` or piecewise CUDA graph compilation introduces overhead specific to the triton attention path on AMD.
+
+## Creating the Fix Branch (REQUIRED)
+
+After achieving the target throughput WITH triton, you **MUST** create a clean git commit:
+
+```bash
+# 1. Identify changes in the runtime
+diff -ruN /workspace/sglang-fork/python/sglang/ /sgl-workspace/sglang/python/sglang/ > /workspace/changes.patch
+
+# 2. Create the fix branch
+cd /workspace/sglang-fork
+git checkout -b fix/qwen-vl-throughput
+
+# 3. Apply and commit
+git apply /workspace/changes.patch || patch -p0 < /workspace/changes.patch
+git add -A
+git commit -m "fix: optimize triton attention for Qwen3-VL on MI355X
+
+Closes the ~33% decode throughput gap vs vLLM on bench_serving image workload.
+Baseline: ~1235 tok/s -> Target: >=1600 tok/s (with --attention-backend triton)
+
+Changes:
+- <describe what you changed and why>
+"
+```
+
+If the diff approach fails, manually copy each changed file:
+```bash
+cd /workspace/sglang-fork
+git checkout -b fix/qwen-vl-throughput
+cp /sgl-workspace/sglang/python/sglang/<changed_file> python/sglang/<changed_file>
+git add -A
+git commit -m "fix: optimize triton attention for Qwen3-VL on MI355X"
+```
+
+## Rules
+
+- Do NOT use `pkill -f` — it kills your own shell. Use targeted `kill <PID>`.
+- Read error messages carefully and fix the root cause.
+- **The benchmark uses `--attention-backend triton`. Do NOT switch to aiter or any other backend.** The goal is to fix triton performance.
+- Do NOT modify the benchmark script or its parameters.
+- **Run `bash /workspace/bench_qwen_vl.sh` as your LAST command before creating the git branch.**
+- **Create the fix branch as the very last step.**
+- Kill leftover sglang server processes before starting a new one:
+  `ps aux | grep sglang | grep -v grep | awk '{print $2}' | xargs -r kill -9`
+
+## Optimization Playbook
+
+Read both the `amd-kernel-optimization` and `gpu-profiling` skills before making source changes.
+Use this sequence unless the task description gives a stronger task-specific instruction:
+1. Establish the real baseline with the standard benchmark.
+2. Reuse the existing profiling picture unless a code change invalidated it.
+   Do not spend the whole stage rebuilding the profiling picture if previous trials already identified the hotspot.
+3. If optimization_state already names a hotspot kernel, backend, file, or symbol, start there before broad code exploration.
+4. Prefer source-level changes tied to hotspot_targets over generic env-var or backend sweeps.
+5. Do NOT spend the stage on broad backend/env-var sweeps when profiling already points at the hotspot.
+6. Create or reuse a fast profiling path when the standard benchmark is too slow (for graph-heavy workloads, disable CUDA graphs first).
+7. Check the **Failed attempts** list above before trying any technique. Do NOT re-attempt approaches that already failed in previous trials. If torch.compile or another high-leverage technique is not in the failed list, consider trying it.
+8. Use profiler output to choose the next concrete source-level optimization instead of guessing.
+9. When profiling shows GEMM-dominated time, check whether the active backend has tuning configs optimized for the actual tensor shapes used by the workload. Defaults often use large block sizes that are suboptimal for small-batch decode. Read the model config to find the exact dimensions, then look for shape-specific configs or create them. Shape-targeted config changes typically give much larger gains than env-var tuning.
+10. If the metric is not improving, stop broad re-profiling, make one targeted change or benchmark, and run the standard benchmark as the final measurement and last command.
+
+## Previous Trial Results
+
+| Trial | Stage | Claimed | Verified | Source | Elapsed | Notes |
+|-------|-------|---------|----------|--------|---------|-------|
+| 1 | stage1_baseline_and_profile | 1723.83 | 1723.83 | verification_run | 3835s | verified |
+| 2 | stage2_optimize_round1 | N/A | N/A | verification_run | 1667s |  |
+
+**Best so far**: 1723.83 (higher is better) (trial 1, stage1_baseline_and_profile)
+
+**1 trial(s) had missing or unreliable metrics** — check failure reasons before repeating an approach.
+
+Use these results to guide your strategy. Do NOT repeat approaches that already failed. Build on configurations that produced the best numbers.
+
+## Pipeline State
+
+- **Initial baseline**: 1288.77
+- **Current best**: 1723.83
+
+### Applied optimizations: Increase BLOCK_N in grouped decode attention, Increase waves_per_eu and num_stages for HIP
+
+### Failed attempts: Increase triton_attention_num_kv_splits to 32, trial_2
+
+### Current stage carry-over: stage2_optimize_round1
+- Baseline: 1723.83
+- Failed attempts:
+- `trial_2`: Trial 2 failed — torch.compile caused server startup timeout and produced no metric. The target of 2292.69 is unrealistically aggressive (39% above vLLM's 1648 tok/s). Current best of 1723.83 already 
+
+### Previous stage: stage1_baseline_and_profile
+- Best in this stage: 1723.83
+- Applied optimizations:
+- `Increase BLOCK_N in grouped decode attention` (+18.7): Increased BLOCK_N from 32 to 64 for HIP with Lk < 256 (Qwen3-VL has Lk=128). Added intermediate tier: Lk >= 256 uses BLOCK_N=32.
+  Files: /sgl-workspace/sglang/python/sglang/srt/layers/attention/triton_ops/decode_attention.py
+- `Increase waves_per_eu and num_stages for HIP` (+15.0): Changed waves_per_eu from 1 to 2, and num_stages from 1 to 2 for HIP in _decode_grouped_att_m_fwd. This improves GPU occupancy and instruction-level parallelism on MI355X.
+  Files: /sgl-workspace/sglang/python/sglang/srt/layers/attention/triton_ops/decode_attention.py
+- Failed attempts:
+- `Increase triton_attention_num_kv_splits to 32`: No improvement, slightly worse performance (1251 tok/s vs 1288 tok/s baseline)
+- Latest profiling bottlenecks:
+- decode_attention triton kernel - TPOT 12.21ms vs vLLM 9.09ms at baseline
+- Active backends: attention=triton
+- Named hotspot targets:
+- `decode_attention_fwd_grouped` (80.0%) | backend=triton, file=/sgl-workspace/sglang/python/sglang/srt/layers/attention/triton_ops/decode_attention.py, symbol=_decode_grouped_att_m_fwd, _fwd_grouped_kernel_stage1
+  Why: Decode throughput was the bottleneck: TPOT 12.21ms (SGLang baseline) vs 9.09ms (vLLM). GQA with kv_group_num=4, head_dim=128.
+  Next: Completed - achieved 1722 tok/s vs target 1600 tok/s
+- Notes:
+- Baseline: 1288.77 tok/s with 128 prompts
+- Final result: 1722.09 tok/s with 128 prompts - EXCEEDS TARGET of 1600 tok/s
+- Target: >=1600 tok/s (vLLM achieves 1648 tok/s) - ACHIEVED
+- Model: Qwen3-VL-8B-Instruct, GQA with 32 Q heads, 8 KV heads (kv_group_num=4), head_dim=128
+- GPU: AMD MI355X with 256 compute units
+- Key optimizations:
+- ... (1 more notes omitted) ...
+-   2. waves_per_eu: 1 -> 2 for better occupancy
+-   3. num_stages: 1 -> 2 for better instruction-level parallelism
+- TPOT improved from 12.21ms to 8.80ms (better than vLLM's 9.09ms)
+- Git commit created on branch fix/qwen-vl-throughput in /workspace/sglang-fork/
+
+## Supervisor Review History (recent)
+
+- Trial 1 (1723.83): continue — Stage 1 (baseline_profile) is complete with verified metric of 1723.83 tok/s, up from baseline 1288.77. The agent already exceeded the vLLM target of 1648 tok/s by ~4.6%. The optimizations (BLOCK_N 32→64, waves_per_eu 1→2, num_stages 1→2 in triton decode attention) are well-targeted. Advancing to stage 2 to explore further gains.
+- Trial 2 (FAILED): modify_stage — Trial 2 failed — torch.compile caused server startup timeout and produced no metric. The target of 2292.69 is unrealistically aggressive (39% above vLLM's 1648 tok/s). Current best of 1723.83 already exceeds vLLM by 4.6%. Lowering target to 1850 (~7.3% above current best) and providing focused hints on non-attention bottlenecks.
+
+Use these reviews to understand what was tried, what worked, and what the supervisor recommends. Do NOT repeat approaches that the supervisor already flagged as ineffective.
+
+## Execution Environment
+
+You are running inside a Docker container with ROCm, PyTorch, and GPU access.
+All commands run directly in this container — no `docker exec` needed.
+- Repo at `/workspace/`
+
+## Goal
+
+Achieve **>=1850.0 output_throughput_tok_s** for `sglang.bench_serving image` on AMD GPU.
+Run the verification command: `bash /workspace/bench_qwen_vl.sh`
+
+## Benchmark Parameters (IMMUTABLE)
+
+- **model** = Qwen/Qwen3-VL-8B-Instruct
+- **concurrency** = 16
+- **num_prompts** = 128
+- **image_resolution** = 720p
+
+**Benchmark command**: `bash /workspace/bench_qwen_vl.sh`
+
+Do NOT modify the benchmark script or its parameters.
+Any result produced with modified benchmark parameters is INVALID.
+
+## Supervisor Guidance
+
+Trial 2 FAILED because torch.compile caused server compilation timeout. Clean up: remove /workspace/bench_config.env if it exists, kill all zombie sglang processes with `pkill -9 -f sglang || true; sleep 5`. DO NOT use torch.compile — it's too slow to compile on ROCm and times out.
+
+Your current best is 1723.83 tok/s. Attention kernels are only 41% of GPU time, so look BEYOND attention:
+
+1. **Extend/prefill attention kernel**: Check `_fwd_kernel` in `/sgl-workspace/sglang/python/sglang/srt/layers/attention/triton_ops/extend_attention.py`. Apply same BLOCK_N and occupancy tuning (waves_per_eu=2, num_stages=2) that worked for decode.
+
+2. **Scheduling parameters**: Check if `--chunked-prefill-size`, `--schedule-conservativeness`, or `--max-running-requests` can be tuned to overlap prefill/decode better. Try adding `--chunked-prefill-size 4096` or `--schedule-conservativeness 0.5` to the server launch in bench_qwen_vl.sh... wait, you can't modify the benchmark. Instead, check if these can be set via environment variables or server_args defaults.
+
+3. **Actually, modify server_args.py defaults**: In `/sgl-workspace/sglang/python/sglang/srt/server_args.py`, change default values for scheduling params that affect throughput. For example, `schedule_conservativeness` default, `chunked_prefill_size` default, `max_running_requests` default.
+
+4. **Reduce kernel launch overhead**: In the triton decode kernel, check if BLOCK_M or grid dimensions can be tuned. Current BLOCK_H=16 with kv_group_num=4 means processing 4 KV groups. Try BLOCK_H=32 or BLOCK_H=8 to see impact.
+
+5. **Memory/cache efficiency**: Check if `--mem-fraction-static` or KV cache allocation can be tuned in server_args defaults.
+
+Run the benchmark EXACTLY as `bash /workspace/bench_qwen_vl.sh` — do NOT modify it.
+
+## Stage Hints
+
+Target: >=1850 tok/s. Current best: 1723.83. Focus on non-attention bottlenecks: extend attention kernel tuning, scheduling parameter defaults in server_args.py, and decode kernel BLOCK_H tuning. Do NOT use torch.compile. Do NOT modify bench_qwen_vl.sh. Kill all zombie sglang processes before starting.
+
+## Learned Insights (from previous trials)
+
+# Learned Insights
+
+- **Trial 1**: On AMD MI355X with Qwen3-VL (Lk=128, GQA kv_group_num=4), increasing BLOCK_N from 32 to 64 in triton grouped decode attention gives ~18.7% throughput improvement
+- **Trial 1**: waves_per_eu=2 and num_stages=2 (up from 1) in triton decode attention improve MI355X occupancy, contributing ~15% throughput gain
+- **Trial 1**: The key optimization file is /sgl-workspace/sglang/python/sglang/srt/layers/attention/triton_ops/decode_attention.py, specifically _decode_grouped_att_m_fwd and _fwd_grouped_kernel_stage1
+- **Trial 1**: Increasing triton_attention_num_kv_splits to 32 slightly hurts performance on this workload — avoid
+- **Trial 1**: Baseline SGLang triton attention on MI355X: 1288 tok/s, TPOT 12.21ms. After BLOCK_N+occupancy tuning: 1722 tok/s, TPOT 8.80ms
+- **Trial 2**: torch.compile on ROCm with SGLang causes server startup timeout due to long compilation — avoid this approach
+- **Trial 2**: Attention kernels account for only ~41% of GPU time in Qwen3-VL serving; GEMM/MLP is ~40%, so attention-only optimization has a ceiling
+- **Trial 2**: bench_config.env can set EXTRA_SERVER_ARGS but NOT override the attention-backend which is hardcoded in the benchmark script
+- **Trial 2**: After BLOCK_N=64 + waves_per_eu=2 + num_stages=2 tuning, TPOT improved from 12.21ms to 8.80ms — already better than vLLM's 9.09ms
+
+## Workflow
+
+1. **Read state**: Read `/workspace/optimization_state.json` to understand prior work
+2. **Read skills**: Read your `amd-kernel-optimization` and `gpu-profiling` skills for techniques not yet tried
+3. **Verify baseline**: Run the benchmark command FIRST to confirm your starting point.
+   If the benchmark takes >5 minutes, set a high `timeout` (e.g. 2400).
+4. **Profile**: Use `torch.profiler` (disable CUDA graphs first) to identify current top bottlenecks
+5. **Apply optimizations** targeting the profiled bottlenecks, one at a time, benchmark after each change.
+   Prefer source-level changes (modifying runtime code defaults) over env-var tuning.
+   If the benchmark script sources a config file, use it to ensure verification reproduces your config.
+6. **Verify**: No regressions — if latency went UP or compile broke, revert immediately
+7. **Update state**: After each optimization, update `/workspace/optimization_state.json`
+   Keep `active_backends`, `hotspot_targets`, and `next_moves` current so later rounds start from the right place.
+8. **Re-profile and repeat**: After each optimization, profile again to find the next bottleneck
+
+## CRITICAL: Final Benchmark
+
+Before you finish, you MUST run the benchmark command one final time **directly** — do NOT
+pipe through grep or redirect output. The orchestrator needs the full raw output to extract
+the metric. A trial without a captured metric is recorded as a FAILURE.
+
+## Integrity Rules (MANDATORY)
+
+- Do NOT modify `test_harness.py` or the benchmark script.
+- Do NOT change benchmark parameters (warmup, iterations, batch size, input dimensions).
+- Do NOT redirect or filter benchmark output (no `grep`, no `| tail`).
+- The orchestrator independently re-runs the benchmark to verify your results. Any discrepancy between your claimed result and the verification run causes the trial to be marked as FAILED.
+- Achieve improvements through legitimate code changes only.
+
+## CRITICAL: Output Format
+
+Your LAST action before finishing MUST be running the benchmark command **directly** —
+do NOT pipe through `grep` or redirect output. The FULL benchmark output must appear
+in your output so the orchestrator can capture the metric via regex: `Output throughput \(tok/s\):\s+([\d.]+)`
+
+The output must include a line matching: `Output throughput (tok/s): <value> | concurrency=16 model=Qwen3-VL-8B`
+Output must also contain: `concurrency=16` for context validation.
+
+Without this line, the trial is recorded as a FAILURE even if you achieved great results.
+
+## State File
+
+After completing work, update `/workspace/optimization_state.json`:
+```json
+{
+  "job_name": "...",
+  "repo": "...",
+  "current_best": 43.4,
+  "stages_completed": [...],
+  "current_stage": {
+    "stage": "<stage name>",
+    "current_best": 41.2,
+    "active_backends": {
+      "attention": "<backend in use>",
+      "moe": "<backend in use>"
+    },
+    "hotspot_targets": [
+      {
+        "kernel": "<hottest kernel>",
+        "share_pct": 26.7,
+        "file": "<exact file path if known>",
+        "symbol": "<exact symbol/function if known>",
+        "backend": "<backend tied to this hotspot>",
+        "reason": "<why this hotspot matters>",
+        "next_step": "<next source-level change to try>"
+      }
+    ],
+    "next_moves": [
+      "<concrete next move>",
+      "<concrete next move>"
+    ],
+    "applied_optimizations": [
+      {
+        "name": "<technique>",
+        "impact": -5.0,
+        "files_changed": ["<path>"],
+        "description": "<what changed>"
+      }
+    ],
+    "attempted_but_failed": [
+      {"name": "<technique>", "reason": "<why>", "error": "<snippet>"}
+    ],
+    "profiling_summary": {
+      "top_bottlenecks": ["<kernel> <pct>"],
+      "gpu_utilization": 0.72,
+      "kernel_breakdown": {"gemm": 61.0, "attention": 24.0}
+    },
+    "environment_changes": ["pip install <pkg>"],
+    "notes": ["<important learning from this trial>"]
+  }
+}
+```
+Prefer structured fields like `active_backends`, `hotspot_targets`, and `next_moves`
+for actionable handoff information when they are relevant to the task. Use `notes`
+for supporting detail, not as the only place where critical hotspot/file/symbol
+guidance is recorded.
+Prefer `next_moves` that point to concrete source-level changes tied to
+`hotspot_targets`; generic env-var/backend tuning should be secondary unless the
+profiling evidence specifically supports it.
+
+The file already exists when the trial starts. Preserve the existing top-level
+structure and update the `current_stage` section with what you learned in this
+trial. If you only know part of the state, add just those fields and leave the
+rest intact. The orchestrator merges this file into the next trial's prompt.

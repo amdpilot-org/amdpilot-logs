@@ -1,0 +1,26 @@
+# Learned Insights
+
+- **Trial 1**: waves_per_eu=4 in _decode_grouped_att_m_fwd gives 53% throughput improvement on MI355X for Qwen3-VL-8B decode attention (1264→1917 tok/s)
+- **Trial 1**: num_kv_splits=32 and num_kv_splits=64 cause performance regression for this workload — default (likely 8) is better
+- **Trial 1**: TPOT is the dominant bottleneck — prefill (TTFT) is already comparable to vLLM
+- **Trial 1**: The decode attention kernel _decode_grouped_att_m_fwd accounts for ~100% of the attention compute time
+- **Trial 1**: To avoid 300s shell timeout with bench_qwen_vl.sh, use nohup + background execution and poll for results
+- **Trial 2**: BLOCK_N=128 and BLOCK_H=8 with waves_per_eu=2 gives ~1943 tok/s on MI355X for Qwen3-VL-8B (vs 1264 baseline)
+- **Trial 2**: num_kv_splits values of 4, 8, 32, 64 all regress vs default 16 for this workload
+- **Trial 2**: torch.compile crashes on ROCm during CUDA graph capture for VL models
+- **Trial 2**: Qwen3-VL may have Lk >= 576 due to RoPE, causing _is_hip override to set BLOCK=64 and silently undo BLOCK_N=128 optimization
+- **Trial 2**: The stage2 reduce kernel (_decode_grouped_att_m_reduce) accounts for ~36% of attention time — a concrete optimization target
+- **Trial 2**: waves_per_eu=8 regresses, waves_per_eu=2 is slightly better than 4 for this workload on MI355X
+- **Trial 3**: Triton kernel parameter tuning (waves_per_eu, BLOCK_N, BLOCK_H, num_warps, num_stages) plateaus at ~1943 tok/s for Qwen3-VL-8B decode attention on MI355X
+- **Trial 3**: waves_per_eu=2 for stage1 kernel and waves_per_eu=8 for stage2 reduce kernel is optimal combination
+- **Trial 3**: BLOCK_N=128, BLOCK_H=8 optimal for kv_group_num=4 (32 Q heads / 8 KV heads)
+- **Trial 3**: num_kv_splits=16 (default) is optimal — 4, 8, 32, 64 all regress
+- **Trial 3**: Quick 32-prompt benchmark (~2053 tok/s) overestimates full 128-prompt benchmark (~1958 tok/s) by ~5%
+- **Trial 3**: After 3 trials of kernel param tuning, need to look at server-side scheduling, non-attention kernels, or algorithmic kernel changes for further gains
+- **Trial 4**: For MI355X decode attention (Qwen3-VL-8B): waves_per_eu=2 for stage1 kernel (_decode_grouped_att_m_fwd) and waves_per_eu=8 for stage2 reduce kernel (_decode_softmax_reducev_fwd) is the optimal combination
+- **Trial 4**: BLOCK_N=128 with BLOCK_H=8 is optimal for GQA with kv_group_num=4 (32 Q heads / 8 KV heads) on MI355X — gives better memory coalescing than default BLOCK_N=32
+- **Trial 4**: num_kv_splits=16 (AMD default) is optimal for Qwen3-VL-8B — values of 4, 8, 32, 64 all cause regression
+- **Trial 4**: The default waves_per_eu=1 in SGLang's triton decode attention kernel is catastrophically bad on MI355X — changing to 4 alone gives 53% throughput improvement (1264→1917 tok/s)
+- **Trial 4**: Triton kernel parameter tuning (waves_per_eu, BLOCK_N, BLOCK_H) accounts for nearly all gains; further tuning of num_warps, num_stages, matrix_instr_nonkdim shows diminishing returns
+- **Trial 4**: torch.compile crashes on ROCm during CUDA graph capture for VL models — not a viable optimization path for this workload
+- **Trial 4**: Quick 32-prompt benchmark overestimates full 128-prompt benchmark by ~5% — always validate with full benchmark

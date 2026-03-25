@@ -1,0 +1,321 @@
+# Task: Optimize Optimize decode latency for Kimi-K2.5 (1T MoE) model on AMD MI355X with TP=8, comparing triton and aiter attention backends on long-context workload on AMD GPU -- Stage4 Deliver Results
+
+## Starting Point
+
+You are continuing from **stage3_optimize_winning_backend** which already has changes applied.
+- Previous best: **38.10ms** decode_median_ms
+- The benchmark script and model code already work. Do NOT rewrite them from scratch.
+- **READ** `/workspace/optimization_state.json` first.
+- Run the existing benchmark first to confirm your starting point.
+
+## Task Description
+
+# Kimi-K2.5 Decode Latency Optimization
+
+Optimize the decode latency of the Kimi-K2.5 (1T MoE) model on 8x AMD MI355X GPUs using SGLang.
+
+## Environment
+
+- **Installed SGLang runtime**: `/sgl-workspace/sglang/` — on `sys.path`, used by `python3 -m sglang.*`. **Edit files HERE to modify SGLang behavior.**
+- **SGLang reference checkout**: `/workspace/sglang/` — fresh `git clone` for reference only. Changes here do NOT affect the runtime.
+- **AITER library**: `/sgl-workspace/aiter/` — AMD inference acceleration library. May need modifications for Kimi-K2.5 support.
+- **Model weights**: `moonshotai/Kimi-K2.5` cached at `/root/.cache/huggingface`.
+- **Benchmark script**: `/workspace/bench_kimi_k25.sh` — runs `sglang.bench_one_batch` with fixed workload params.
+
+## Model Architecture
+
+Kimi-K2.5 is a 1T-parameter MoE model (DeepSeek V3 architecture):
+- 384 experts, 8 active per token, 1 shared expert
+- MLA (Multi-head Latent Attention) with 64 attention heads
+- hidden_size=7168, MoE hidden dim per expert=2048
+- 61 layers (including 1 dense layer), SwiGLU activation
+- Requires `--trust-remote-code`
+
+## Benchmark
+
+The benchmark runs `sglang.bench_one_batch` with a long-context workload and prints:
+  `Decode median (ms): <value> | tp=8 batch=1 in=8192 out=2048 decode=<backend>`
+
+Fixed parameters: tp=8, batch_size=1, input_len=8192, output_len=2048.
+First run takes a long time (model loading + CUDA graph compilation).
+Set `timeout: 1200` when running it. If it times out, kill leftover sglang processes
+(`ps aux | grep sglang | grep -v grep | awk '{print $2}' | xargs -r kill -9`) before retrying.
+
+### Backend configuration
+
+The benchmark defaults to `triton` decode / `aiter` prefill attention backends.
+To change backends, write to `/workspace/bench_config.env`:
+```bash
+export DECODE_ATTENTION_BACKEND=aiter
+export PREFILL_ATTENTION_BACKEND=aiter
+export SGLANG_ROCM_FUSED_DECODE_MLA=1
+```
+This ensures the verification run uses the same configuration as your run.
+
+Read the benchmark output logs carefully to identify which backends are active (attention,
+MoE, all-reduce) before optimizing. Only optimize backends that are actually in use.
+
+## Optimization Objectives
+
+### Objective 1: Triton Backend Optimization
+Optimize decode latency using the triton attention backend (default). This includes:
+- MoE kernel config tuning (GEMM block sizes, waves_per_eu)
+- GEMM config tuning for small-M (batch=1 decode)
+- All-reduce optimization
+- CUDA graph optimization
+
+### Objective 2: AITER Attention Backend Optimization (PRIMARY)
+The AITER attention backend may perform significantly better than triton for long-context
+decode (input_len=8192). However, it currently has known issues with Kimi-K2.5:
+
+**Issue 1: MLA absorbed path w_kc bug** — For BF16 models, `forward_absorb_prepare` in
+`forward_mla.py:231` crashes with `AttributeError: 'NoneType' object has no attribute 'dtype'`
+because `self.w_kc` is never populated. The weight absorption in `deepseek_weight_loader.py`
+doesn't trigger for the default BF16 configuration.
+
+**Issue 2: Fused MLA RoPE crash** — The AITER fused decode MLA path
+(`forward_mla_fused_rope_rocm.py`) is broken (sglang issue #20691):
+1. `HybridAttnBackend` has no attribute `forward_metadata`
+2. `DeepseekScalingRotaryEmbedding` has no attribute `cos_sin_cache`
+
+**Your task**: Fix the AITER decode attention path for Kimi-K2.5, then benchmark both
+backends and determine which is optimal. The agent should:
+1. First establish a triton baseline
+2. Fix the AITER backend bugs (in `/sgl-workspace/sglang/` and/or `/sgl-workspace/aiter/`)
+3. Enable AITER decode with `DECODE_ATTENTION_BACKEND=aiter` and `SGLANG_ROCM_FUSED_DECODE_MLA=1`
+4. Compare performance and select the optimal configuration
+5. Continue optimizing the winning backend
+
+### Objective 3: Deliver Results
+After optimization is complete, push your changes and write a setup guide:
+
+1. **Create branches**: The fork remotes are pre-configured:
+   - `/sgl-workspace/sglang/` has remote `fork` → `git@github.com:Arist12/sglang.git`
+   - `/sgl-workspace/aiter/` has remote `fork` → `git@github.com:Arist12/aiter.git`
+   - SSH keys are mounted at `/root/.ssh/`
+   - Set `GIT_SSH_COMMAND='ssh -o StrictHostKeyChecking=no'` before git operations
+
+2. **Push changes**: Create branch `kimi-k25-optimize` on each fork with your changes:
+   ```bash
+   cd /sgl-workspace/sglang
+   git checkout -b kimi-k25-optimize
+   git add -A && git commit -m "Kimi-K2.5 decode optimization for MI355X"
+   GIT_SSH_COMMAND='ssh -o StrictHostKeyChecking=no' git push fork kimi-k25-optimize
+   ```
+   Do the same for aiter if you modified it.
+
+3. **Write setup guide**: Create `/workspace/setup_guide.md` with:
+   - Step-by-step reproduction instructions starting from the base Docker image
+   - Which branches to clone and how to set up the environment
+   - The exact benchmark command and expected results
+   - Comparison of triton vs aiter backend performance
+
+4. **Verify**: Clone your branches into a clean directory and confirm the benchmark runs correctly.
+
+## Rules
+
+- Do NOT use `pkill -f` — it kills your own shell. Use targeted `kill <PID>`.
+- Read error messages carefully and fix the root cause.
+- Final metrics must use CUDA graphs (no `--disable-cuda-graph`).
+- Run `bench_kimi_k25.sh` as your LAST command.
+
+## Optimization Playbook
+
+This is the baseline/profile stage.
+1. Read both the `amd-kernel-optimization` and `gpu-profiling` skills.
+2. Establish the fast baseline first with `bash /workspace/bench_kimi_k25.sh` and wait for it to finish.
+3. After the fast baseline succeeds, use `bash /workspace/bench_kimi_k25.sh` for the real measurement.
+4. Capture active implementations/backends (when relevant), bottlenecks, and concrete optimization candidates in `/workspace/optimization_state.json`.
+5. Record the exact file/symbol/backend (when relevant) for the hottest kernels and 1-3 concrete source-level next moves in `/workspace/optimization_state.json`.
+   Record `next_moves` as concrete source-level changes tied to those hotspot targets; env-var/backend tuning should be secondary unless directly justified by evidence.
+6. Do NOT stop after the baseline just because there is no concrete target yet.
+7. Do NOT pivot into broad backend/env-var sweeps before you have profiling context; get the profiling picture first.
+8. After baseline and profiling, the agent may continue with optimizations instead of waiting for an artificial stage boundary.
+9. If you already have a valid baseline, profiling data, and no clearly better next move, stop exploring, update `/workspace/optimization_state.json`, and run the official benchmark to finish the stage.
+
+## Baseline Retry Notes
+
+- Trial 4 (38.20): modify_stage — The target of 28.58ms (25% below baseline) is unrealistic given 4 trials with no improvement. However, significant optimization levers remain untried: (1) AITER decode with head padding to bypass the num_head_qo%16 assertion, (2) torch.compile, (3) proper MoE config tuning. Loosening target to 35ms (~8% improvement) and providing specific technical guidance on the head-padding approach.
+- Trial 5 (38.10): modify_stage — After 5 trials stuck at 38.1ms, the agent has NOT actually modified the Triton decode attention kernel despite it being 30% of decode time (~11ms). The 35ms target was too aggressive causing the agent to give up. Relaxing to 37ms (3% improvement) and providing very specific Triton kernel config changes to try on MI355X.
+
+Keep this stage focused on getting one valid baseline metric plus profiling context. Do not spend tokens rehashing broader optimization strategy yet.
+
+## Execution Environment
+
+You are running inside a Docker container with ROCm, PyTorch, and GPU access.
+All commands run directly in this container — no `docker exec` needed.
+- Repo at `/workspace/`
+
+## Goal
+
+Establish a reliable baseline and profiling picture for `sglang.bench_one_batch decode`.
+This stage is for baseline measurement and bottleneck discovery, not for declaring victory.
+This stage advances after a real metric is recorded and profiling context is captured.
+Do NOT treat the baseline itself as task completion or proof that no more optimization is needed.
+
+## Benchmark Parameters (IMMUTABLE)
+
+- **model** = moonshotai/Kimi-K2.5
+- **tp** = 8
+- **batch_size** = 1
+- **input_len** = 8192
+- **output_len** = 2048
+
+**Benchmark command**: `bash /workspace/bench_kimi_k25.sh`
+
+Do NOT modify the benchmark script or its parameters.
+Any result produced with modified benchmark parameters is INVALID.
+
+## Supervisor Guidance
+
+Focus ONLY on tuning the Triton decode attention kernel — it's 30% of decode (~11ms). Do NOT repeat MoE config tuning (already failed trial 4). Do NOT attempt AITER decode (fundamentally blocked by num_head_qo%16 assertion).
+
+1. Open `/sgl-workspace/sglang/python/sglang/srt/layers/attention/triton_ops/decode_attention.py`
+2. MLA decode uses kv_group_num=1 (after MLA transform) with Lk=576 (512+64). The NON-grouped `_fwd_kernel` is used.
+3. Find where HIP-specific params are set. You showed: BLOCK_N=16 for Lk>=576 on HIP, num_warps reduced to 1 for HIP, num_stages=1 for HIP.
+4. MI355X (CDNA4) has more compute capacity than MI300X — the conservative HIP defaults may be undersized.
+5. SPECIFIC CHANGES TO TRY (modify source directly, run benchmark after each):
+   a) Increase BLOCK_N from 16 to 32 (better memory coalescing on wider bus)
+   b) Increase num_warps from 1 to 2 (better wavefront occupancy)
+   c) Set num_stages=2 (enable software pipelining)
+   d) Add waves_per_eu=2 to the kernel config if not set
+6. If a change helps, keep it and try the next. If it hurts, revert immediately.
+7. IMPORTANT: After modifying the .py file, the change takes effect on next benchmark run — Triton recompiles the kernel.
+8. Run: `bash /workspace/bench_kimi_k25.sh` after each change.
+
+Target: ≤37ms (3% improvement from 38.1ms). This is achievable with kernel config tuning on the decode attention path.
+
+## Stage Hints
+
+Deliver all results as specified:
+
+1. **Push sglang changes**:
+```bash
+cd /sgl-workspace/sglang
+git checkout -b kimi-k25-optimize
+git add -A && git commit -m 'Kimi-K2.5 decode optimization for MI355X'
+GIT_SSH_COMMAND='ssh -o StrictHostKeyChecking=no' git push fork kimi-k25-optimize
+```
+
+2. **Push aiter changes** (if modified):
+```bash
+cd /sgl-workspace/aiter
+git checkout -b kimi-k25-optimize
+git add -A && git commit -m 'Kimi-K2.5 AITER fixes for MI355X'
+GIT_SSH_COMMAND='ssh -o StrictHostKeyChecking=no' git push fork kimi-k25-optimize
+```
+
+3. **Write `/workspace/setup_guide.md`** with:
+   - Step-by-step reproduction from base Docker image
+   - Which branches to clone (`Arist12/sglang@kimi-k25-optimize`, `Arist12/aiter@kimi-k25-optimize`)
+   - Environment setup (env vars, bench_config.env contents)
+   - Exact benchmark command and expected results
+   - Triton vs AITER comparison table with decode median latencies
+   - Description of bugs fixed and optimizations applied
+
+4. **Verify**: Clone branches into `/tmp/verify/`, confirm key files are present. Run final `bash /workspace/bench_kimi_k25.sh` to confirm the benchmark works with your optimal config.
+
+## Workflow
+
+1. **Read state**: Read `/workspace/optimization_state.json` to understand prior work
+2. **Read skills**: Read your `amd-kernel-optimization` and `gpu-profiling` skills for techniques not yet tried
+3. **Verify baseline**: Run the benchmark command FIRST to confirm your starting point.
+   If the benchmark takes >5 minutes, set a high `timeout` (e.g. 2400).
+4. **Profile**: Use `torch.profiler` (disable CUDA graphs first) to identify current top bottlenecks
+5. **Apply optimizations** targeting the profiled bottlenecks, one at a time, benchmark after each change.
+   Prefer source-level changes (modifying runtime code defaults) over env-var tuning.
+   If the benchmark script sources a config file, use it to ensure verification reproduces your config.
+6. **Verify**: No regressions — if latency went UP or compile broke, revert immediately
+7. **Update state**: After each optimization, update `/workspace/optimization_state.json`
+   Keep `active_backends`, `hotspot_targets`, and `next_moves` current so later rounds start from the right place.
+8. **Re-profile and repeat**: After each optimization, profile again to find the next bottleneck
+
+## CRITICAL: Final Benchmark
+
+Before you finish, you MUST run the benchmark command one final time **directly** — do NOT
+pipe through grep or redirect output. The orchestrator needs the full raw output to extract
+the metric. A trial without a captured metric is recorded as a FAILURE.
+
+## Integrity Rules (MANDATORY)
+
+- Do NOT modify `test_harness.py` or the benchmark script.
+- Do NOT change benchmark parameters (warmup, iterations, batch size, input dimensions).
+- Do NOT redirect or filter benchmark output (no `grep`, no `| tail`).
+- The orchestrator independently re-runs the benchmark to verify your results. Any discrepancy between your claimed result and the verification run causes the trial to be marked as FAILED.
+- Achieve improvements through legitimate code changes only.
+
+## CRITICAL: Output Format
+
+Your LAST action before finishing MUST be running the benchmark command **directly** —
+do NOT pipe through `grep` or redirect output. The FULL benchmark output must appear
+in your output so the orchestrator can capture the metric via regex: `Decode median \(ms\):\s+([\d.]+)`
+
+The output must include a line matching: `Decode median (ms): <value> | tp=8 batch=1 in=8192 out=2048`
+Output must also contain: `tp=8` for context validation.
+
+Without this line, the trial is recorded as a FAILURE even if you achieved great results.
+
+## State File
+
+After completing work, update `/workspace/optimization_state.json`:
+```json
+{
+  "job_name": "...",
+  "repo": "...",
+  "current_best": 43.4,
+  "stages_completed": [...],
+  "current_stage": {
+    "stage": "<stage name>",
+    "current_best": 41.2,
+    "active_backends": {
+      "attention": "<backend in use>",
+      "moe": "<backend in use>"
+    },
+    "hotspot_targets": [
+      {
+        "kernel": "<hottest kernel>",
+        "share_pct": 26.7,
+        "file": "<exact file path if known>",
+        "symbol": "<exact symbol/function if known>",
+        "backend": "<backend tied to this hotspot>",
+        "reason": "<why this hotspot matters>",
+        "next_step": "<next source-level change to try>"
+      }
+    ],
+    "next_moves": [
+      "<concrete next move>",
+      "<concrete next move>"
+    ],
+    "applied_optimizations": [
+      {
+        "name": "<technique>",
+        "impact": -5.0,
+        "files_changed": ["<path>"],
+        "description": "<what changed>"
+      }
+    ],
+    "attempted_but_failed": [
+      {"name": "<technique>", "reason": "<why>", "error": "<snippet>"}
+    ],
+    "profiling_summary": {
+      "top_bottlenecks": ["<kernel> <pct>"],
+      "gpu_utilization": 0.72,
+      "kernel_breakdown": {"gemm": 61.0, "attention": 24.0}
+    },
+    "environment_changes": ["pip install <pkg>"],
+    "notes": ["<important learning from this trial>"]
+  }
+}
+```
+Prefer structured fields like `active_backends`, `hotspot_targets`, and `next_moves`
+for actionable handoff information when they are relevant to the task. Use `notes`
+for supporting detail, not as the only place where critical hotspot/file/symbol
+guidance is recorded.
+Prefer `next_moves` that point to concrete source-level changes tied to
+`hotspot_targets`; generic env-var/backend tuning should be secondary unless the
+profiling evidence specifically supports it.
+
+The file already exists when the trial starts. Preserve the existing top-level
+structure and update the `current_stage` section with what you learned in this
+trial. If you only know part of the state, add just those fields and leave the
+rest intact. The orchestrator merges this file into the next trial's prompt.
