@@ -1,0 +1,6 @@
+# Exclude large raw trajectory wire/context data
+**/trial_*_trajectory/
+
+# Build logs (not critical)
+docker-build-*.log
+skinny-gemm-*.log

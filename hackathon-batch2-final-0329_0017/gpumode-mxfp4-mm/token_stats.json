@@ -1,0 +1,30 @@
+{
+  "frontier_model": {
+    "total_input_tokens": 264543,
+    "total_output_tokens": 29926,
+    "total_tokens": 294469,
+    "pct_of_all_tokens": 0.0,
+    "breakdown": {
+      "nudge": {
+        "calls": 42,
+        "input_tokens": 175243,
+        "output_tokens": 13255,
+        "total_tokens": 188498
+      },
+      "supervisor": {
+        "calls": 13,
+        "input_tokens": 89300,
+        "output_tokens": 16671,
+        "total_tokens": 105971
+      }
+    }
+  },
+  "executor_model": {
+    "calls": 13499,
+    "input_tokens": 763225911,
+    "output_tokens": 4244069,
+    "total_tokens": 767469980,
+    "pct_of_all_tokens": 100.0
+  },
+  "grand_total_tokens": 767764449
+}

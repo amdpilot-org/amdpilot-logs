@@ -1,0 +1,164 @@
+{
+  "job_name": "gpumode-moe-mxfp4",
+  "repo": "",
+  "initial_baseline": 179800.824,
+  "current_best": null,
+  "stages_completed": [],
+  "current_stage": {
+    "stage": "stage5_deliver_results",
+    "baseline": null,
+    "current_best": 176637.428,
+    "applied_optimizations": [
+      {
+        "name": "ksplit tuning for E33 small batch",
+        "impact": -2.4,
+        "files_changed": [
+          "kernel.py"
+        ],
+        "description": "Set ksplit=7 for E=33, bs=16 shape (4.36 tok/exp) via monkey-patched get_ksplit",
+        "technique_category": "",
+        "timestamp": ""
+      },
+      {
+        "name": "ksplit tuning for E257 small batch",
+        "impact": -1.9,
+        "files_changed": [
+          "kernel.py"
+        ],
+        "description": "Set ksplit=4 for E=257, bs=16 shape (0.56 tok/exp) via monkey-patched get_ksplit",
+        "technique_category": "",
+        "timestamp": ""
+      },
+      {
+        "name": "block_m tuning",
+        "impact": -0.5,
+        "files_changed": [
+          "kernel.py",
+          "tuning_config.json"
+        ],
+        "description": "Set block_m=64 for E33 shapes, block_m=32 for E257 shapes",
+        "technique_category": "",
+        "timestamp": ""
+      },
+      {
+        "name": "AITER_USE_NT=0",
+        "impact": -0.2,
+        "files_changed": [
+          "tuning_config.json"
+        ],
+        "description": "Disable non-temporal loads for better performance",
+        "technique_category": "",
+        "timestamp": ""
+      }
+    ],
+    "attempted_but_failed": [
+      {
+        "name": "AITER_ONLINE_TUNE=1",
+        "reason": "No improvement, slightly slower (176208 vs 175415)",
+        "error": "",
+        "approaches_tried": 1,
+        "timestamp": ""
+      },
+      {
+        "name": "block_m=16 for E33",
+        "reason": "Regression - slower performance",
+        "error": "",
+        "approaches_tried": 1,
+        "timestamp": ""
+      },
+      {
+        "name": "ksplit=2 for medium batches",
+        "reason": "No improvement over ksplit=0",
+        "error": "",
+        "approaches_tried": 1,
+        "timestamp": ""
+      },
+      {
+        "name": "block_m=128/256 for E257",
+        "reason": "No consistent improvement over block_m=32",
+        "error": "",
+        "approaches_tried": 1,
+        "timestamp": ""
+      },
+      {
+        "name": "trial_22",
+        "reason": "Stage 5 deliverables completed: final metric 176.8\u03bcs (1.7% improvement over 179.8\u03bcs baseline), profiling done, optimization_state.json updated with all applied optimizations and failed attempts. Confi",
+        "error": "",
+        "approaches_tried": 1,
+        "timestamp": "2026-03-29T08:06:44.307765"
+      }
+    ],
+    "profiling_summary": {
+      "top_bottlenecks": [
+        "stage2 down GEMM (ck_moe_stage2): ~89%",
+        "stage1 gate_up GEMM (ck_moe_stage1): ~7%",
+        "MoE sorting + quant: ~4%"
+      ],
+      "gpu_utilization": 0.0,
+      "memory_usage_gb": 0.0,
+      "kernel_breakdown": {
+        "gemm_stage2": 89.0,
+        "gemm_stage1": 7.0,
+        "moe_sort_quant": 4.0
+      },
+      "raw_profile_path": "",
+      "timestamp": ""
+    },
+    "active_backends": {
+      "attention": "n/a",
+      "moe": "aiter.fused_moe with 2-stage CK kernels (moe_ck2stages_gemm1/gemm2)"
+    },
+    "hotspot_targets": [
+      {
+        "kernel": "moe_ck2stages_gemm2_64x32x32x128_1x1",
+        "share_pct": 89.0,
+        "file": "/sgl-workspace/aiter/aiter/ops/triton/moe_2stage.py",
+        "symbol": "ck_moe_stage2",
+        "backend": "aiter CK MoE 2-stage",
+        "reason": "Stage2 down GEMM dominates runtime - primary optimization target",
+        "next_step": "Already tuned ksplit and block_m; further gains would require custom Triton/HIP kernels"
+      }
+    ],
+    "next_moves": [
+      "Custom Triton kernel for MoE dispatch/routing to reduce 4% sorting overhead",
+      "Custom HIP kernel via load_inline for stage2 GEMM with gfx950-specific MFMA tuning",
+      "Try fused_dynamic_mxfp4_quant_moe_sort to merge quant+sort overhead"
+    ],
+    "environment_changes": [],
+    "notes": [
+      "Final result: 176,637.4 \u03bcs geom_mean (1.8% improvement over initial baseline 179,800.8 \u03bcs)",
+      "Config tuning is exhausted after 20+ trials - diminishing returns observed",
+      "Main remaining opportunity: 16-26% sorting overhead identified in profiling",
+      "Further significant improvements require custom Triton/HIP kernels beyond config tuning scope",
+      "Leaderboard #1 is ~110 \u03bcs geom_mean - ~37% faster than our best, indicating custom kernel approach needed"
+    ],
+    "started_at": "2026-03-29T08:01:25.037196",
+    "completed_at": ""
+  },
+  "attempt_history": [],
+  "technique_attempts": {
+    "trial_1": 1,
+    "trial_2": 1,
+    "trial_3": 1,
+    "trial_4": 1,
+    "trial_5": 1,
+    "trial_6": 1,
+    "trial_7": 1,
+    "trial_8": 1,
+    "trial_9": 1,
+    "trial_10": 1,
+    "trial_11": 1,
+    "trial_12": 1,
+    "trial_13": 1,
+    "trial_14": 1,
+    "trial_15": 1,
+    "trial_16": 1,
+    "trial_17": 1,
+    "trial_18": 1,
+    "trial_19": 1,
+    "trial_20": 1,
+    "trial_21": 1,
+    "trial_22": 1
+  },
+  "global_notes": []
+}
