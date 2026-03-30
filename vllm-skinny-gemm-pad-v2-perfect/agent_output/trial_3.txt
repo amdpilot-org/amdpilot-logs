@@ -1,0 +1,2144 @@
+•
+• Used ReadFile (optimization_state.json)
+•
+• Used ReadFile (.amdpilot/env.md)
+•
+• Used ReadFile (.amdpilot/environment.md)
+• Let me start by reading the key files mentioned in the task and understanding
+  the current state of the implementation.
+• Used ReadFile (vllm/csrc/rocm/skinny_gemms.cu)
+•
+• Used ReadFile (vllm/vllm/model_executor/layers/utils.py)
+• Let me continue reading the rest of the skinny_gemms.cu file and then run the
+  benchmark to understand the current state.
+• Used ReadFile (vllm/csrc/rocm/skinny_gemms.cu)
+• Now let me run the benchmark first to confirm the starting point, and then run
+  a quick diagnostic to understand the current state.
+• Used Shell (cd /workspace/vllm && /us...pace/test_harness.py 2>&1)
+• Now I can see the current state clearly:
+
+  • Current score: 69.0
+  • The kernel has strideA support working (pad_a=True tests pass)
+  • strideB support is NOT working - all pad_b=True tests fail
+  • The is_contiguous() check has been removed from utils.py
+  • The kernel source has stride parameters
+  • But the .so file is older than the kernel source - needs rebuild
+
+  Let me analyze the kernel code more carefully to understand the strideB issue.
+  Looking at the test failures, when pad_b=True, there are significant errors. L
+  et me examine how strideB is being used in the kernel.
+• Used Grep (strideB)
+• I see the issue now. Looking at line 1322:
+
+  auto strideB_in = in_a.stride(0);  // weight stride
+
+  The comment says "weight stride" but in the kernel code, B refers to the weigh
+  t tensor (in_a), and A refers to the activation tensor (in_b).
+
+  Looking at the kernel dispatch at lines 1345-1357, the parameters are passed a
+  s:
+
+  wvSplitK_hf_sml_<...>(K_in, M_in, Bx_in, By_in, af4, bf4, biasf4, c, __wvPrGrp
+  , CuCount, strideA_in, strideB_in);
+
+  Where:
+
+  • af4 = in_a.data_ptr() (weight)
+  • bf4 = in_b.data_ptr() (activation)
+  • strideA_in = in_b.stride(0) (activation stride)
+  • strideB_in = in_a.stride(0) (weight stride)
+
+  But looking at the kernel function signature at line 307-311:
+
+  wvSplitK_hf_sml_(const int K, const int M, const int Bx, const int By,
+                   const scalar_t* B, const scalar_t* __restrict__ A,
+                   const scalar_t* __restrict__ BIAS, scalar_t* C,
+                   const int _WvPrGrp, const int CuCount, const int strideA,
+                   const int strideB)
+
+  So in the kernel:
+
+  • B = weight tensor (af4 = in_a)
+  • A = activation tensor (bf4 = in_b)
+  • strideA should be the stride of A (activation)
+  • strideB should be the stride of B (weight)
+
+  The current code has:
+
+  • strideA_in = in_b.stride(0) - this is activation stride, correct for A
+  • strideB_in = in_a.stride(0) - this is weight stride, correct for B
+
+  So the parameter passing looks correct. Let me look more closely at how stride
+  B is being used in the kernel. Looking at line 432-434 in wvSplitK_hf_sml_:
+
+  const scalar_t* B_ = &B[(m + 0) * strideB + k_];
+  for (int y = 0; y < YTILE; y++)
+    bigB[y][k2].h8 = (loadnt((scalar8*)(&B_[y * strideB])));
+
+  The issue is that B is the weight tensor which has shape [N, K]. When accessin
+  g B[m + y, k_], we need to use the row stride properly.
+
+  Wait, I need to understand the tensor layout better. Let me check the test har
+  ness to understand what pad_b means:
+• Used ReadFile (test_harness.py)
+• Now I understand. Looking at line 75:
+
+  B = (torch.rand(m, k, dtype=dtype, device="cuda") * 2 - 1) * xavier
+
+  So B (weight) has shape [m, k] = [N, K] in kernel terms.
+
+  And line 88:
+
+  ref = torch.nn.functional.linear(A, B, BIAS)
+
+  So torch.nn.functional.linear(A, B) computes A @ B.T, where:
+
+  • A is [n, k]
+  • B is [m, k]
+  • Result is [n, m]
+
+  In the kernel code, the comment at line 1320-1322 says:
+
+  // Note: in the kernel, 'A' refers to in_b (activation), 'B' refers to in_a (w
+  eight)
+  auto strideA_in = in_b.stride(0);  // activation stride
+  auto strideB_in = in_a.stride(0);  // weight stride
+
+  So in the kernel:
+
+  • in_a = weight = B from Python = shape [N, K]
+  • in_b = activation = A from Python = shape [n, k]
+
+  Wait, that's confusing. Let me trace through more carefully.
+
+  In Python test:
+
+  • A = activation = shape [n, k]
+  • B = weight = shape [m, k]
+  • ref = torch.nn.functional.linear(A, B, BIAS) computes A @ B.T = [n, k] @ [k,
+    ] = [n, m]
+
+  In C++ wvSplitK function (line 1305):
+
+  torch::Tensor wvSplitK(const at::Tensor& in_a, const at::Tensor& in_b, ...)
+
+  Looking at the Python call in utils.py line 202:
+
+  out = ops.wvSplitK(weight, x_view, cu_count, bias)
+
+  So:
+
+  • in_a = weight = [m, k] = [N, K] in kernel notation
+  • in_b = x_view (activation) = [n_total, k] where n_total = product of all dim
+    except last
+
+  But wait, looking at the kernel function signature at line 307:
+
+  wvSplitK_hf_sml_(const int K, const int M, const int Bx, const int By,
+                   const scalar_t* B, const scalar_t* __restrict__ A, ...
+
+  And line 1344-1347:
+
+  wvSplitK_hf_sml_<fptype, 64, _YTILE, 16, 8, _UNRL, _N>
+      <<<grid, block, 0, stream>>>(K_in, M_in, Bx_in, By_in, af4, bf4, ...
+
+  Where:
+
+  • af4 = in_a.data_ptr() = weight
+  • bf4 = in_b.data_ptr() = activation
+
+  So in the kernel:
+
+  • B parameter = weight = shape [N, K] where N=m, K=k
+  • A parameter = activation = shape [n_total, K]
+
+  Now looking at how B (weight) is accessed with strideB at line 432-434:
+
+  const scalar_t* B_ = &B[(m + 0) * strideB + k_];
+  for (int y = 0; y < YTILE; y++)
+    bigB[y][k2].h8 = (loadnt((scalar8*)(&B_[y * strideB])));
+
+  Here m is the row index in the output (activation batch dimension), and we're
+  accessing weight rows.
+
+  The weight tensor B has shape [N, K]. For a contiguous tensor, stride(0) = K.
+  For a padded tensor, stride(0) > K.
+
+  When we want to access B[m+y, k_], the address should be:
+
+  • For contiguous: B[(m+y) * K + k_]
+  • For padded: B[(m+y) * strideB + k_]
+
+  The current code does:
+
+  const scalar_t* B_ = &B[(m + 0) * strideB + k_];  // Base address at row m, co
+  lumn k_
+  for (int y = 0; y < YTILE; y++)
+    bigB[y][k2].h8 = (loadnt((scalar8*)(&B_[y * strideB])));  // Access row m+y
+
+  This looks correct! B_ points to B[m, k_], and then B_[y * strideB] accesses B
+  [m+y, k_].
+
+  But wait, let me look at the actual memory layout more carefully. When we do &
+  B_[y * strideB], we're accessing B[(m+0) * strideB + k_ + y * strideB] = B[(m+
+  y) * strideB + k_].
+
+  Hmm, that's accessing B[m+y, k_] which is correct for getting different rows a
+  t the same column position.
+
+  But looking at the kernel more carefully, I see the issue might be in how the
+  data is being loaded. Let me look at line 433-434 again:
+
+  for (int y = 0; y < YTILE; y++)
+    bigB[y][k2].h8 = (loadnt((scalar8*)(&B_[y * strideB])));
+
+  This loads A_CHUNK/2 floats (or A_CHUNK halfs) starting from B[m+y, k_]. But f
+  or a padded tensor, consecutive elements in a row are still adjacent in memory
+  - only the row stride is different!
+
+  Oh wait, I think I see the problem now! When we load with (scalar8*)(&B_[y * s
+  trideB]), we're loading A_CHUNK/2 consecutive floats from position B[m+y, k_].
+  But if k_ + A_CHUNK/2 > K, we might be reading into the padding region or into
+  the next row!
+
+  Actually no, there's a guard at line 429:
+
+  if (k_ >= K) break;
+
+  Let me look at the actual issue more carefully. Looking at the test output, th
+  e error is consistent around 0.06-0.21 for pad_b=True cases. This suggests the
+  kernel is reading wrong data, not crashing.
+
+  Let me check if there's an issue with how the weight tensor dimensions are int
+  erpreted. Looking at line 1309-1310:
+
+  auto M_in = in_a.size(0);
+  auto K_in = in_a.size(1);
+  auto N_in = in_b.size(0);
+
+  Wait! This is wrong! If in_a is the weight with shape [m, k] = [N, K] in kerne
+  l notation, then:
+
+  • M_in = in_a.size(0) = N (number of output features)
+  • K_in = in_a.size(1) = K (reduction dimension)
+  • N_in = in_b.size(0) = n_total (batch size)
+
+  But in the kernel, M is used as the activation batch dimension and N is used a
+  s the output feature dimension. So the naming is swapped!
+
+  Let me verify this by looking at how M and N are used in the kernel. At line 3
+  68:
+
+  uint32_t m = (blockIdx.x * _WvPrGrp + (threadIdx.y % _WvPrGrp)) * YTILE;
+
+  And line 388:
+
+  while (m < M) {
+
+  So M is the dimension that blocks iterate over, which should be the batch dime
+  nsion (n_total from activation).
+
+  At line 428-434:
+
+  const scalar_t* B_ = &B[(m + 0) * strideB + k_];
+  for (int y = 0; y < YTILE; y++)
+    bigB[y][k2].h8 = (loadnt((scalar8*)(&B_[y * strideB])));
+
+  This accesses rows m through m+YTILE-1 of B. If B is the weight with shape [N,
+  K], then we're accessing N rows.
+
+  But wait, looking at line 1308-1310 again:
+
+  auto M_in = in_a.size(0);  // weight.size(0) = N
+  auto K_in = in_a.size(1);  // weight.size(1) = K
+  auto N_in = in_b.size(0);  // activation.size(0) = n_total
+
+  So M_in = N and N_in = n_total. But in the kernel, M is the loop bound for the
+  batch dimension, and N is... let me check.
+
+  At line 396-398:
+
+  for (int i = 0; i < YTILE; i++)
+    for (int n = 0; n < N; n++)
+
+  So N is another loop dimension. Looking at line 460-462:
+
+  for (uint32_t n = 0; n < N; n++) {
+    for (int y = 0; y < YTILE; y++) {
+
+  And the output at line 516:
+
+  C[m + i + n * M] = __float2s<scalar_t>(sum[n][i]);
+
+  So the output C has layout where C[m + i + n * M] means C is organized as [M,
+  N] with M being the fast dimension. This matches out_c = torch::empty({N_in, M
+  _in}, ...) at line 1329-1331.
+
+  Wait, that's {N_in, M_in} = {n_total, N}. So output shape is [n_total, N].
+
+  And C[m + i + n * M] with M=M_in=N would give index m + i + n * N, which for a
+  [n_total, N] tensor in row-major would be accessing element [n, m+i].
+
+  Hmm, this is getting confusing. Let me look at the actual Python interface mor
+  e carefully.
+
+  Looking at utils.py line 202:
+
+  out = ops.wvSplitK(weight, x_view, cu_count, bias)
+
+  And the expected output at line 203:
+
+  return out.reshape(*x.shape[:-1], weight.shape[0])
+
+  So if x is [n, k] and weight is [m, k], output should be [n, m].
+
+  In C++, torch.nn.functional.linear(A, B) where A is [n, k] and B is [m, k] com
+  putes A @ B.T giving [n, m].
+
+  So in wvSplitK:
+
+  • in_a = weight = [m, k]
+  • in_b = x_view = [n, k]
+  • output should be [n, m]
+
+  At line 1329-1331:
+
+  auto out_c = torch::empty(
+      {N_in, M_in}, ...);
+
+  With N_in = in_b.size(0) = n and M_in = in_a.size(0) = m, output is [n, m]. Go
+  od.
+
+  Now at line 1344-1347, the kernel is called with:
+
+  wvSplitK_hf_sml_<...>(K_in, M_in, ..., af4, bf4, ...)
+
+  So K=K_in=k, M=M_in=m.
+
+  In the kernel at line 307, parameters are (const int K, const int M, ..., cons
+  t scalar_t* B, const scalar_t* A, ...).
+
+  So in the kernel:
+
+  • K = k (reduction dim)
+  • M = m (weight rows = output features)
+  • B = af4 = in_a = weight = [m, k]
+  • A = bf4 = in_b = activation = [n, k]
+
+  Now looking at line 368 and 388:
+
+  uint32_t m = (blockIdx.x * _WvPrGrp + (threadIdx.y % _WvPrGrp)) * YTILE;
+  while (m < M) {
+
+  So the kernel loops over m from 0 to M-1, where M=m (weight rows). This means
+  different blocks/waves work on different rows of the weight matrix.
+
+  At line 432-434:
+
+  const scalar_t* B_ = &B[(m + 0) * strideB + k_];
+  for (int y = 0; y < YTILE; y++)
+    bigB[y][k2].h8 = (loadnt((scalar8*)(&B_[y * strideB])));
+
+  This accesses B at rows m, m+1, ..., m+YTILE-1 and column k_. For weight B wit
+  h shape [M, K] = [m, k], this is correct.
+
+  But wait! The issue is that B in the kernel is the weight, which has shape [M,
+  K]. When we access B[row, col], the address should be row * strideB + col.
+
+  For a contiguous tensor, strideB = K. For a padded tensor, strideB > K.
+
+  The current code at line 432-434 looks correct for accessing B with strideB. B
+  ut let me check if there's an issue with how the data is interpreted.
+
+  Actually, I think I found the bug! Look at line 433:
+
+  for (int y = 0; y < YTILE; y++)
+    bigB[y][k2].h8 = (loadnt((scalar8*)(&B_[y * strideB])));
+
+  This loads A_CHUNK/2 consecutive floats starting from B_[y * strideB]. But B_
+  points to B[m, k_], so B_[y * strideB] is B[m+y, k_].
+
+  The load then reads A_CHUNK/2 consecutive elements from B[m+y, k_], which woul
+  d be B[m+y, k_], B[m+y, k_+1], ..., B[m+y, k_+A_CHUNK/2-1].
+
+  But wait, that's accessing consecutive columns in the same row, which should b
+  e correct for a row-major tensor!
+
+  Unless... let me check if there's a transpose issue. In torch.nn.functional.li
+  near(A, B), the computation is A @ B.T. So if B is [m, k], B.T is [k, m], and
+  A @ B.T gives [n, k] @ [k, m] = [n, m].
+
+  But in the kernel, we're treating B as if it's already in the right layout for
+  the multiplication. Let me check if the kernel expects B to be transposed or n
+  ot.
+
+  Looking at line 1377-1378:
+
+  fptype* af4 = reinterpret_cast<fptype*>(in_a.data_ptr());
+  const fptype* bf4 = reinterpret_cast<const fptype*>(in_b.data_ptr());
+
+  And line 1344-1347 passes af4, bf4 as B, A to the kernel.
+
+  So the kernel receives:
+
+  • B = weight (in_a)
+  • A = activation (in_b)
+
+  And the kernel computes... let me trace through the computation.
+
+  At line 422-476, the kernel does:
+
+  1. Load chunks of A (activation) into LDS or local variables
+  2. Load chunks of B (weight) into local variables
+  3. Multiply and accumulate
+
+  At line 463-467:
+
+  for (uint32_t b = 0; b < A_CHUNK / 2; b++) {
+    DOT2C(sum[n][y], bigA[n][k2].f[b], bigB[y][k2].f[b])
+  }
+
+  This does sum += bigA * bigB. Looking at how bigA and bigB are loaded:
+
+  At line 446-448:
+
+  for (int n = 0; n < N; n++) {
+    bigA[n][k2] = *((const bigType*)(&(s[k_ + K * n])));
+  }
+
+  So bigA[n] loads from s[k_ + K * n], which is activation data. The activation
+  A has shape [n_total, K], and we're accessing element k_ + K * n, which is A[n
+  , k_].
+
+  At line 432-434:
+
+  const scalar_t* B_ = &B[(m + 0) * strideB + k_];
+  for (int y = 0; y < YTILE; y++)
+    bigB[y][k2].h8 = (loadnt((scalar8*)(&B_[y * strideB])));
+
+  So bigB[y] loads from B[(m+y) * strideB + k_], which is B[m+y, k_].
+
+  The multiplication at line 466 does sum[n][y] += bigA[n] * bigB[y], which is A
+  [n, k_] * B[m+y, k_].
+
+  After accumulating over all k_, we get sum[n][y] = sum_k A[n, k] * B[m+y, k].
+
+  This is computing A @ B.T where the output at position [n, m+y] is sum_k A[n,
+  k] * B[m+y, k].
+
+  OK so the computation is correct! The issue must be somewhere else.
+
+  Let me look at the LDS loading code for A (activation). At line 351-363:
+
+  for (uint32_t k = 0; k < min__(K * N, max_lds_len);
+       k += THRDS * WvPrGrp * A_CHUNK) {
+    uint32_t k_in = k + ((threadIdx.y * THRDS + threadIdx.x) * A_CHUNK);
+
+    if (k_in >= min__(K * N, max_lds_len)) break;
+
+    // Compute 2D index for strided access: row = k_in / K, col = k_in % K
+    // Then global address = row * strideA + col
+    uint32_t row = k_in / K;
+    uint32_t col = k_in % K;
+    uint32_t global_idx = row * strideA + col;
+    *((bigType*)(&s[k_in])) = *((bigType*)(&A[global_idx]));
+  }
+
+  This loads A into LDS at position s[k_in], where k_in = row * K + col conceptu
+  ally.
+
+  But then at line 447:
+
+  bigA[n][k2] = *((const bigType*)(&(s[k_ + K * n])));
+
+  This reads from s[k_ + K * n]. If A has shape [N, K] in the kernel (where N=n_
+  total), then A[n, k_] should be at position n * K + k_ in row-major order.
+
+  But wait, the comment at line 357-361 says:
+
+  // Compute 2D index for strided access: row = k_in / K, col = k_in % K
+  // Then global address = row * strideA + col
+
+  So k_in is treated as row * K + col, and the global address is row * strideA +
+  col.
+
+  For activation A with shape [N, K]:
+
+  • row = n (batch index)
+  • col = k_ (column index)
+  • k_in = n * K + k_
+  • global_idx = n * strideA + k_
+
+  This looks correct for loading A[n, k_] into LDS at position s[n * K + k_].
+
+  But then at line 447, we read from s[k_ + K * n] = s[n * K + k_], which matche
+  s where we stored A[n, k_].
+
+  Hmm, but there's a subtle issue here. The LDS is organized as a linear array o
+  f size max_lds_len. We're storing activation data in LDS at positions 0 to K*N
+  -1 (or up to max_lds_len-1).
+
+  But if strideA > K (padded activation), then the activation tensor has more co
+  lumns in memory than the logical K. When we load A[n, k_] into LDS, we use glo
+  bal_idx = n * strideA + k_ to read from global memory, but we store it at s[k_
+  in] where k_in = n * K + k_.
+
+  This is correct! We're packing the logical K columns into LDS, ignoring the pa
+  dding.
+
+  Now let me check the same logic for B (weight). Looking at lines 425-435:
+
+  for (uint32_t k2 = 0; k2 < UNRL; k2++) {
+    uint32_t k = k1 + k2 * THRDS * A_CHUNK;
+    uint32_t k_ = k + threadIdx.x * A_CHUNK;
+    if (k_ >= K) break;
+
+    // Use strideB for padded weight tensor support
+    const scalar_t* B_ = &B[(m + 0) * strideB + k_];
+    for (int y = 0; y < YTILE; y++)
+      bigB[y][k2].h8 = (loadnt((scalar8*)(&B_[y * strideB])));
+  }
+
+  Wait, I see an issue here! The load at line 434 reads A_CHUNK/2 consecutive fl
+  oats from B_[y * strideB]. But B_ points to B[m, k_], so B_[y * strideB] point
+  s to B[m+y, k_].
+
+  The load then reads A_CHUNK/2 consecutive elements starting from B[m+y, k_]. F
+  or a row-major tensor, consecutive elements in memory are consecutive columns
+  in the same row. So this reads B[m+y, k_], B[m+y, k_+1], ..., B[m+y, k_+A_CHUN
+  K/2-1].
+
+  But what if k_ + A_CHUNK/2 > K? We'd be reading beyond the logical K columns,
+  potentially into padding or into garbage!
+
+  Actually, there's a check at line 429: if (k_ >= K) break;. But this only chec
+  ks if k_ >= K, not if k_ + A_CHUNK/2 > K!
+
+  So if K is not a multiple of A_CHUNK, we might read beyond the valid data.
+
+  But wait, there's a check at line 1325:
+
+  TORCH_CHECK(K_in % 8 == 0, "k % 8 == 0");
+
+  And A_CHUNK is 8 (from line 1339-1372, the macro uses A_CHUNK=8). So K is alwa
+  ys a multiple of 8, and k_ + A_CHUNK/2 = k_ + 4 should be within bounds as lon
+  g as k_ < K.
+
+  Actually, A_CHUNK/2 = 4 floats, which is 8 halfs. So we're loading 8 elements
+  at a time, and K is a multiple of 8, so we should be fine.
+
+  Let me think about this differently. The test shows that pad_a=True works but
+  pad_b=True fails. This suggests the strideA handling is correct but strideB ha
+  ndling has a bug.
+
+  Let me look at the strideB usage more carefully. At line 432-434:
+
+  const scalar_t* B_ = &B[(m + 0) * strideB + k_];
+  for (int y = 0; y < YTILE; y++)
+    bigB[y][k2].h8 = (loadnt((scalar8*)(&B_[y * strideB])));
+
+  Hmm, I think I see the issue now! When we do &B_[y * strideB], we're computing
+  the address as: B + (m * strideB + k_) + y * strideB = B + (m+y) * strideB + k
+  _
+
+  This gives us the address of B[m+y, k_]. Then we load A_CHUNK/2 consecutive el
+  ements from this address.
+
+  For a row-major tensor, consecutive elements in memory are consecutive columns
+  . So loading from B[m+y, k_] reads B[m+y, k_], B[m+y, k_+1], ..., B[m+y, k_+A_
+  CHUNK/2-1].
+
+  But wait, for a padded tensor with strideB > K, the elements B[m+y, k_] and B[
+  m+y, k_+1] are still adjacent in memory! The padding only affects the gap betw
+  een rows, not within a row.
+
+  So the load should be correct...
+
+  Unless there's an issue with how the tensor is created in Python. Let me look
+  at the pad_tensor function again:
+
+  def pad_tensor(weight):
+      num_pad = 256 // weight.element_size()
+      return F.pad(weight, (0, num_pad), "constant", 0)[..., :-num_pad]
+
+  This pads the last dimension (dim=1, the K dimension) with num_pad zeros, then
+  slices off the last num_pad elements. This creates a non-contiguous tensor whe
+  re the stride is larger than K.
+
+  For a tensor with shape [M, K], after padding:
+
+  • Original: shape [M, K], stride [K, 1]
+  • After F.pad with (0, num_pad): shape [M, K+num_pad], stride [K+num_pad, 1]
+  • After slicing [..., :-num_pad]: shape [M, K], stride [K+num_pad, 1]
+
+  So the padded tensor has stride[0] = K + num_pad > K, but stride[1] = 1.
+
+  Now, when the kernel accesses B[m+y, k_] with strideB = K + num_pad, it comput
+  es the address as (m+y) * strideB + k_ = (m+y) * (K + num_pad) + k_.
+
+  For a contiguous tensor, this would be (m+y) * K + k_, which is correct. For a
+  padded tensor, this is (m+y) * (K + num_pad) + k_, which correctly skips the p
+  adding.
+
+  So the address calculation looks correct!
+
+  Let me check if there's an issue with how the data is loaded. At line 434:
+
+  bigB[y][k2].h8 = (loadnt((scalar8*)(&B_[y * strideB])));
+
+  This loads A_CHUNK/2 consecutive floats. But scalar8 is defined at line 320:
+
+  using scalar8 =
+      __attribute__((__vector_size__((A_CHUNK / 2) * sizeof(float)))) float;
+
+  So scalar8 is a vector of A_CHUNK/2 floats. For A_CHUNK=8, this is 4 floats.
+
+  But the weight tensor B might be half or bfloat16, not float! Let me check the
+  type.
+
+  At line 1375-1383:
+
+  AT_DISPATCH_REDUCED_FLOATING_TYPES(in_b.scalar_type(), "wvSplitK", [&] {
+    using fptype = typename scalar<scalar_t>::type;
+    fptype* af4 = reinterpret_cast<fptype*>(in_a.data_ptr());
+    const fptype* bf4 = reinterpret_cast<const fptype*>(in_b.data_ptr());
+    ...
+  });
+
+  So fptype is half or __hip_bfloat16 depending on the input type. And af4 and b
+  f4 are pointers to this type.
+
+  At line 434, B_ is of type const scalar_t*, which is const fptype* = const hal
+  f* or const __hip_bfloat16*.
+
+  When we do (scalar8*)(&B_[y * strideB]), we're casting a const half* to a scal
+  ar8* (which is float* essentially). This means we're loading 4 floats = 8 half
+  s from the address.
+
+  For a contiguous half tensor, 8 consecutive halfs in memory are 8 consecutive
+  columns in the same row. This is correct.
+
+  For a padded half tensor, 8 consecutive halfs in memory starting from B[m+y, k
+  _] are still 8 consecutive columns in row m+y. The padding doesn't affect with
+  in-row layout.
+
+  So this should also be correct...
+
+  Let me look at the wvSplitK_hf_ kernel (the non-sml version) to see if there's
+  a difference:
+• Used ReadFile (vllm/csrc/rocm/skinny_gemms.cu)
+• I notice something at line 740 in wvSplitK_hf_:
+
+  for (int b = 0; b < YTILE; b++)
+    bigB[b][k2].h8 = (loadnt((scalar8*)(&B_[b * strideB])));
+
+  This uses variable b for the loop, but at line 738:
+
+  const scalar_t* B_ = &B[(m + 0) * strideB + k_];
+
+  The base is B[m, k_], and then B_[b * strideB] accesses B[m+b, k_]. This looks
+  correct.
+
+  But wait, I just noticed something! Look at line 738 more carefully:
+
+  const scalar_t* B_ = &B[(m + 0) * strideB + k_];
+
+  The (m + 0) is suspicious. Why not just m? And more importantly, what is m at
+  this point?
+
+  Looking at line 637 in wvSplitK_hf_:
+
+  uint32_t m = (blockIdx.x * _WvPrGrp + threadIdx.y) * YTILE;
+
+  So m is the starting row index for this thread block. And the kernel loops wit
+  h while (m < M) at line 695.
+
+  OK so the logic is:
+
+  1. m starts at some row based on blockIdx and threadIdx.y
+  2. We load weight rows m, m+1, ..., m+YTILE-1
+  3. After processing, m is incremented at line 886: m += CuCount * _WvPrGrp * Y
+     E;
+
+  This looks correct for the persistent kernel pattern.
+
+  Let me check the wvSplitK_hf_sml_ kernel to see if there's a difference:
+• Used ReadFile (vllm/csrc/rocm/skinny_gemms.cu)
+• I notice the code at line 432-434 looks correct. Let me check the wvSplitK_hf_
+  big_ kernel as well to see if there's a pattern:
+• Used ReadFile (vllm/csrc/rocm/skinny_gemms.cu)
+• I see the same pattern at line 1108-1110. The code looks consistent across all
+  three kernel variants.
+
+  Let me think about this more carefully. The test shows that when pad_b=True (w
+  eight is padded), the results are wrong. But the strideB usage looks correct i
+  n the kernel.
+
+  Wait! I just realized something. Let me check the dispatch code again. At line
+  1321-1322:
+
+  auto strideA_in = in_b.stride(0);  // activation stride
+  auto strideB_in = in_a.stride(0);  // weight stride
+
+  And at line 1308-1310:
+
+  auto M_in = in_a.size(0);
+  auto K_in = in_a.size(1);
+  auto N_in = in_b.size(0);
+
+  So:
+
+  • in_a = weight, shape [M_in, K_in], stride [strideB_in, 1] (potentially padde
+  • in_b = activation, shape [N_in, K_in], stride [strideA_in, 1] (potentially p
+    ded)
+
+  But wait, for a 2D tensor, stride(0) is the row stride and stride(1) is the co
+  lumn stride. For a contiguous tensor:
+
+  • stride(0) = size(1) = K
+  • stride(1) = 1
+
+  For a padded tensor created by F.pad(weight, (0, num_pad), ...)[..., :-num_pad
+  ]:
+
+  • The padding is on the last dimension (dim 1)
+  • After padding and slicing, stride(0) = original_K + num_pad > K
+  • stride(1) = 1
+
+  So stride(0) correctly captures the padded row stride.
+
+  But wait, I need to double-check the Python test. Let me look at it again:
+• Used ReadFile (test_harness.py)
+• OK so pad_tensor pads the last dimension. For a 2D tensor with shape [M, K], t
+  his creates a tensor with:
+
+  • shape [M, K]
+  • stride(0) = K + num_pad (row stride includes padding)
+  • stride(1) = 1 (column stride is still 1)
+
+  Now let me trace through what happens in the kernel when B (weight) is padded.
+
+  In the kernel, B has shape [M, K] logically, but strideB > K physically.
+
+  At line 432-434:
+
+  const scalar_t* B_ = &B[(m + 0) * strideB + k_];
+  for (int y = 0; y < YTILE; y++)
+    bigB[y][k2].h8 = (loadnt((scalar8*)(&B_[y * strideB])));
+
+  For y=0, we load from B[m, k_]. For y=1, we load from B[m+1, k_]. etc.
+
+  The load reads A_CHUNK/2 consecutive elements from each position. For a half t
+  ensor, this reads 4 floats = 8 halfs.
+
+  For a contiguous tensor, 8 consecutive halfs starting from B[m+y, k_] are B[m+
+  y, k_], B[m+y, k_+1], ..., B[m+y, k_+7].
+
+  For a padded tensor, the within-row layout is the same! The padding only affec
+  ts the gap between rows. So 8 consecutive halfs starting from B[m+y, k_] are s
+  till B[m+y, k_], B[m+y, k_+1], ..., B[m+y, k_+7].
+
+  So the load should be correct...
+
+  Unless there's an issue with how the data is stored in memory after padding. L
+  et me think about this more carefully.
+
+  When we do F.pad(weight, (0, num_pad), "constant", 0), we're adding num_pad ze
+  ros to the end of each row. So if weight was [M, K] with stride [K, 1], after
+  padding it becomes [M, K+num_pad] with stride [K+num_pad, 1].
+
+  Then [..., :-num_pad] slices off the last num_pad columns, giving shape [M, K]
+  but with stride [K+num_pad, 1].
+
+  So in memory, the padded tensor looks like:
+
+  Row 0: [w00, w01, ..., w0(K-1), <gap of num_pad elements>]
+  Row 1: [w10, w11, ..., w1(K-1), <gap of num_pad elements>]
+  ...
+
+  The gap contains whatever was in the padding (zeros), but we never access it b
+  ecause we only load K elements per row.
+
+  When we access B[m+y, k_] with strideB = K + num_pad, we get the address (m+y)
+  * (K+num_pad) + k_, which correctly points to w(m+y),k_.
+
+  And when we load 8 consecutive halfs from this address, we get w(m+y),k_, w(m+
+  y),k_+1, ..., w(m+y),k_+7, which is correct as long as k_ + 8 <= K.
+
+  Since K is a multiple of 8 (enforced by the check at line 1325), and k_ is alw
+  ays a multiple of A_CHUNK=8 (from line 428: k_ = k + threadIdx.x * A_CHUNK whe
+  re k is a multiple of A_CHUNK*UNRL), we have k_ % 8 == 0 and k_ < K, so k_ + 8
+  <= K.
+
+  So the load should be correct!
+
+  Let me check if there's an issue with the LDS usage calculation. The hint ment
+  ions "Verify LDS usage calculation uses the correct stride variable."
+
+  Looking at line 312 in wvSplitK_hf_sml_:
+
+  constexpr int max_lds_len = LDS_SIZE / 2;
+
+  And line 339:
+
+  __shared__ scalar_t s[max_lds_len];
+
+  The LDS is used to store activation data. At line 351-363, activation is loade
+  d into LDS:
+
+  for (uint32_t k = 0; k < min__(K * N, max_lds_len);
+       k += THRDS * WvPrGrp * A_CHUNK) {
+    uint32_t k_in = k + ((threadIdx.y * THRDS + threadIdx.x) * A_CHUNK);
+
+    if (k_in >= min__(K * N, max_lds_len)) break;
+
+    // Compute 2D index for strided access: row = k_in / K, col = k_in % K
+    // Then global address = row * strideA + col
+    uint32_t row = k_in / K;
+    uint32_t col = k_in % K;
+    uint32_t global_idx = row * strideA + col;
+    *((bigType*)(&s[k_in])) = *((bigType*)(&A[global_idx]));
+  }
+
+  The LDS is organized as a linear array where position k_in = n * K + k_ stores
+  activation A[n, k_]. The check k < min__(K * N, max_lds_len) ensures we don't
+  exceed LDS capacity.
+
+  But wait, this check uses K * N, which is the logical size. If the activation
+  is padded, the physical size is strideA * N > K * N. But we're only loading th
+  e logical K columns into LDS, which is correct.
+
+  Hmm, but what if K * N > max_lds_len? Then we can't fit all activation data in
+  LDS, and we need to use the wvSplitK_hf_ or wvSplitK_hf_big_ kernel instead.
+
+  Looking at the dispatch at line 1343-1357:
+
+  if ((K_in * N_in <= max_lds_len) && (M_in % _YTILE == 0))
+    wvSplitK_hf_sml_<...>
+  else if (K_in * N_in <= max_lds_len * 1.2)
+    wvSplitK_hf_<...>
+  else
+    wvSplitK_hf_big_<...>
+
+  So the dispatch is based on K_in * N_in, which is the logical activation size.
+  This seems correct.
+
+  Let me check if there's an issue with the wvSplitK_hf_ kernel when activation
+  doesn't fit in LDS. Looking at line 752-760:
+
+  for (int n = 0; n < N; n++) {
+    if (k_ + K * n < max_lds_len)
+      bigA[n][k2] = *((const bigType*)(&(s[k_ + K * n])));
+    else {
+      // Use strideA for padded tensor support
+      uint32_t global_idx = n * strideA + k_;
+      bigA[n][k2] = *((const bigType*)(&(A[global_idx])));
+    }
+  }
+
+  This checks if k_ + K * n < max_lds_len to decide whether to load from LDS or
+  from global memory. But this check uses K, not strideA!
+
+  For a padded activation with strideA > K, the condition k_ + K * n < max_lds_l
+  en might be true even when the data isn't actually in LDS. Or it might be fals
+  e when the data is in LDS.
+
+  Wait, no. The LDS is organized by logical indices, not physical indices. We st
+  ore A[n, k_] at LDS position n * K + k_, regardless of strideA. The strideA is
+  only used when reading from global memory.
+
+  So the check k_ + K * n < max_lds_len is correct for determining if A[n, k_] i
+  s in LDS.
+
+  But there's still a potential issue. If K * N > max_lds_len, then some activat
+  ion data won't fit in LDS. The check k_ + K * n < max_lds_len determines which
+  data is in LDS.
+
+  For example, if max_lds_len = 32768 and K = 4096, N = 16, then K * N = 65536 >
+  32768. So only the first 32768 / 4096 = 8 rows of activation fit in LDS.
+
+  When n < 8, we load from LDS at position k_ + K * n. When n >= 8, we load from
+  global memory at address n * strideA + k_.
+
+  This looks correct!
+
+  OK let me step back and think about what could be wrong. The test shows:
+
+  • pad_a=True, pad_b=False: PASS (activation padded, weight contiguous)
+  • pad_a=False, pad_b=True: FAIL (activation contiguous, weight padded)
+  • pad_a=True, pad_b=True: FAIL (both padded)
+
+  So the issue is specifically with padded weight (strideB), not padded activati
+  on (strideA).
+
+  Let me look at the strideB usage one more time. At line 432-434:
+
+  const scalar_t* B_ = &B[(m + 0) * strideB + k_];
+  for (int y = 0; y < YTILE; y++)
+    bigB[y][k2].h8 = (loadnt((scalar8*)(&B_[y * strideB])));
+
+  Hmm, I just noticed something. The load at line 434 reads A_CHUNK/2 consecutiv
+  e floats (or A_CHUNK halfs) from &B_[y * strideB].
+
+  For a half tensor, scalar8 is 4 floats = 8 halfs. So we're loading 8 halfs fro
+  m the address.
+
+  But wait, the type of B_ is const scalar_t* where scalar_t is half or bfloat16
+  . When we cast to scalar8* and dereference, we're reading 4 floats = 8 halfs.
+
+  For a contiguous half tensor, 8 consecutive halfs in memory are 8 consecutive
+  columns in the same row. This is correct.
+
+  But for a padded half tensor... wait, the within-row layout is the same for pa
+  dded and contiguous tensors! The padding only affects the gap between rows.
+
+  So loading 8 consecutive halfs from B[m+y, k_] should give B[m+y, k_], ..., B[
+  m+y, k_+7] regardless of whether the tensor is padded.
+
+  Unless... OH! I think I see the issue now!
+
+  When we do (scalar8*)(&B_[y * strideB]), we're casting a const half* to a floa
+  t* (since scalar8 is a vector of floats). This is a type pun.
+
+  For a half tensor, B_[y * strideB] is a half value at position B[m+y, k_]. The
+  address &B_[y * strideB] is the address of this half.
+
+  When we cast to scalar8* and dereference, we read 4 floats = 8 bytes = 4 halfs
+  ? No wait, 4 floats = 16 bytes = 8 halfs.
+
+  Actually, let me check the size:
+
+  • sizeof(half) = 2 bytes
+  • sizeof(float) = 4 bytes
+  • sizeof(scalar8) = (A_CHUNK/2) * sizeof(float) = 4 * 4 = 16 bytes
+
+  So scalar8 is 16 bytes = 8 halfs. This matches A_CHUNK = 8 halfs.
+
+  OK so the load reads 8 halfs from the address, which is correct.
+
+  But wait, there might be an alignment issue! If B_[y * strideB] is not 16-byte
+  aligned, the load might be inefficient or incorrect.
+
+  For a contiguous half tensor with K columns, the address of B[m+y, k_] is base
+  + (m+y) * K * 2 + k_ * 2 bytes. For this to be 16-byte aligned, we need (m+y)
+  * K * 2 + k_ * 2 to be divisible by 16, i.e., (m+y) * K + k_ divisible by 8.
+
+  Since K is a multiple of 8 and k_ is a multiple of 8 (from line 428), this is
+  satisfied. So the address is 16-byte aligned for contiguous tensors.
+
+  For a padded half tensor with strideB columns, the address of B[m+y, k_] is ba
+  se + (m+y) * strideB * 2 + k_ * 2 bytes. For this to be 16-byte aligned, we ne
+  ed (m+y) * strideB + k_ divisible by 8.
+
+  Since k_ is a multiple of 8, we need (m+y) * strideB divisible by 8.
+
+  Now, strideB = K + num_pad where num_pad = 256 // weight.element_size(). For h
+  alf, element_size() = 2, so num_pad = 128.
+
+  So strideB = K + 128. Since K is a multiple of 8, strideB = K + 128 is also a
+  multiple of 8.
+
+  So (m+y) * strideB is a multiple of 8, and the address is 16-byte aligned. Goo
+  d.
+
+  Hmm, I'm running out of ideas. Let me look at the actual error message more ca
+  refully. The test shows:
+
+  [FAIL] N=2,K=256,M=256,bias=0,pad_a=False,pad_b=True: skinny=True, max_err=0.2
+  09961
+
+  The error is 0.21, which is significant but not huge. This suggests the kernel
+  is reading wrong data, not completely garbage.
+
+  Let me think about what could cause a consistent error of this magnitude...
+
+  Actually, wait! I just realized something. Let me look at the bias indexing. T
+  he hint says "Fix bias indexing."
+
+  Looking at line 509-514 in wvSplitK_hf_sml_:
+
+  if (BIAS)
+    sum[n][i] += __half2float(BIAS[(m + i) % Bx + (n % By) * M]);
+
+  The bias index is (m + i) % Bx + (n % By) * M.
+
+  For a 1D bias with shape [M], Bx = M and By = 1. So the index is (m + i) % M +
+  (n % 1) * M = (m + i) % M.
+
+  For a 2D bias with shape [N, M], Bx = M and By = N. So the index is (m + i) %
+  M + (n % N) * M.
+
+  Wait, but the bias tensor might also be padded! If the bias is padded, we need
+  to use its stride to access it correctly.
+
+  But actually, looking at the test, the failures occur even with bias=0 (no bia
+  s). So the bias indexing is not the primary issue.
+
+  Let me look at the output write-back. At line 516:
+
+  C[m + i + n * M] = __float2s<scalar_t>(sum[n][i]);
+
+  This writes to C[m + i + n * M]. For output C with shape [N, M] (row-major), t
+  he element at [n, m+i] is at index n * M + (m + i).
+
+  But the code writes to m + i + n * M, which is the same as n * M + m + i. So t
+  his is correct for row-major output.
+
+  Wait, but what if M is not the logical M but something else? Let me check.
+
+  At line 1329-1331:
+
+  auto out_c = torch::empty(
+      {N_in, M_in}, ...);
+
+  So output shape is [N_in, M_in] = [n_total, m]. And M_in = in_a.size(0) = weig
+  ht.size(0) = m.
+
+  So the output is [n_total, m], and C[m + i + n * M] with M=M_in=m gives index
+  m + i + n * m, which for row-major [n, m] tensor is element [n, m+i].
+
+  But wait, if m + i >= M, we're writing beyond the logical output bounds! Let m
+  e check if there's bounds checking.
+
+  Looking at line 505-518:
+
+  if (threadIdx.x == 63) {
+    for (int n = 0; n < N; n++) {
+      for (int i = 0; i < YTILE; i++) {
+        if constexpr (std::is_same_v<scalar_t, half>) {
+          if (BIAS)
+            sum[n][i] += __half2float(BIAS[(m + i) % Bx + (n % By) * M]);
+        } else if constexpr (std::is_same_v<scalar_t, __hip_bfloat16>) {
+          if (BIAS)
+            sum[n][i] +=
+                __bfloat162float(BIAS[(m + i) % Bx + (n % By) * M]);
+        }
+        C[m + i + n * M] = __float2s<scalar_t>(sum[n][i]);
+      }
+    }
+  }
+
+  There's no bounds check on m + i < M! If m + i >= M, we're writing beyond the
+  output bounds.
+
+  But wait, there's logic at line 641-647 in wvSplitK_hf_ that handles this:
+
+  if (m < M && (m + YTILE) >= M) {
+    uint32_t startColumn = M - YTILE;
+    for (uint32_t i = 0; i < (m - startColumn); i++) {
+      commitColumn[i] = 0;
+    }
+    m = startColumn;
+  }
+
+  This sets commitColumn[i] = 0 for columns that are out of bounds, and adjusts
+  m to M - YTILE.
+
+  Then at line 820:
+
+  if (commitColumn[i]) {
+    ...
+    C[m + i + n * M] = __float2s<scalar_t>(sum[n][i]);
+  }
+
+  So the write is guarded by commitColumn[i]. This should prevent out-of-bounds
+  writes.
+
+  But wait, this logic is in wvSplitK_hf_, not in wvSplitK_hf_sml_! Let me check
+  if wvSplitK_hf_sml_ has similar logic.
+
+  Looking at wvSplitK_hf_sml_ (lines 304-570), I don't see any commitColumn logi
+  c! The kernel just writes unconditionally at line 516.
+
+  Let me search for commitColumn in wvSplitK_hf_sml_:
+• Used Grep (commitColumn)
+• I see! commitColumn is used in wvSplitK_hf_ (starting at line 626) and wvSplit
+  K_hf_big_ (starting at line 955), but NOT in wvSplitK_hf_sml_ (lines 304-570).
+
+  Looking at the dispatch logic at line 1343-1357:
+
+  if ((K_in * N_in <= max_lds_len) && (M_in % _YTILE == 0))
+    wvSplitK_hf_sml_<...>
+  else if (K_in * N_in <= max_lds_len * 1.2)
+    wvSplitK_hf_<...>
+  else
+    wvSplitK_hf_big_<...>
+
+  The wvSplitK_hf_sml_ kernel is used when K_in * N_in <= max_lds_len AND M_in %
+  _YTILE == 0. The second condition ensures M is a multiple of YTILE, which mean
+  s there's no fragmentation at the end.
+
+  So in theory, when wvSplitK_hf_sml_ is used, M % YTILE == 0, and the kernel do
+  esn't need bounds checking because all blocks process exactly YTILE rows.
+
+  But wait, looking at line 368:
+
+  uint32_t m = (blockIdx.x * _WvPrGrp + (threadIdx.y % _WvPrGrp)) * YTILE;
+
+  And line 388:
+
+  while (m < M) {
+
+  The kernel loops with m += CuCount * _WvPrGrp * YTILE at line 568. So differen
+  t blocks process different ranges of m.
+
+  If M % YTILE == 0, then all blocks should process exactly YTILE rows per itera
+  tion, and the last iteration should land exactly at M.
+
+  But what if M is not a multiple of CuCount * _WvPrGrp * YTILE? Then some block
+  s might have m < M but m + YTILE > M in the last iteration!
+
+  Let me check the hint again: "ensure bounds checking in the kernel write-back
+  section prevents out-of-bounds writes when M is not a multiple of YTILE."
+
+  So the issue is that wvSplitK_hf_sml_ lacks bounds checking when M is not a mu
+  ltiple of YTILE!
+
+  But wait, the dispatch condition is M_in % _YTILE == 0, which should ensure M
+  is a multiple of YTILE. Unless there's a bug in the dispatch...
+
+  Actually, looking more carefully at the dispatch at line 1343:
+
+  if ((K_in * N_in <= max_lds_len) && (M_in % _YTILE == 0))
+
+  Here _YTILE is the template parameter, not a runtime variable. The dispatch ma
+  cros at line 1360-1373 use different YTILE values based on sYT.
+
+  Let me trace through the dispatch more carefully. At line 1387:
+
+  int sYT = (M_in + CuCount * 4 - 1) / (CuCount * 4);
+
+  And line 1391-1401:
+
+  switch (N_in) {
+    case 1:
+      WVSPLIT_TILE(sYT, 1)
+      break;
+    ...
+  }
+
+  The WVSPLIT_TILE macro at line 1360-1373:
+
+  #define WVSPLIT_TILE(_sYT, __N)                           \
+    {                                                       \
+      bool fit_lds = (K_in * N_in <= max_lds_len);          \
+      if (_sYT <= 1)                                        \
+        WVSPLITK(1, 4, __N)                                 \
+      else if ((__N == 1) || (!fit_lds) || (_sYT <= 4 * 2)) \
+        WVSPLITK(2, 2, __N)                                 \
+      else if (_sYT <= 4 * 3)                               \
+        WVSPLITK(3, 2, __N)                                 \
+      else if (__N == 4)                                    \
+        WVSPLITK(4, 1, __N)                                 \
+      else                                                  \
+        WVSPLITK(4, 2, __N)                                 \
+    }
+
+  And WVSPLITK at line 1339-1358:
+
+  #define WVSPLITK(_YTILE, _UNRL, _N)                                        \
+    {                                                                        \
+      dim3 block(64, 16);                                                    \
+      int __wvPrGrp = mindiv(M_in, CuCount * _YTILE, 16);                    \
+      if ((K_in * N_in <= max_lds_len) && (M_in % _YTILE == 0))              \
+        wvSplitK_hf_sml_<fptype, 64, _YTILE, 16, 8, _UNRL, _N>               \
+            <<<grid, block, 0, stream>>>(...);            \
+      else if (K_in * N_in <= max_lds_len * 1.2)                             \
+        wvSplitK_hf_<fptype, 64, _YTILE, 16, 8, _UNRL, _N>                   \
+            <<<grid, block, 0, stream>>>(...);            \
+      else                                                                   \
+        wvSplitK_hf_big_<fptype, 64, _YTILE, 16, 8, _UNRL, _N>               \
+            <<<grid, block, 0, stream>>>(...);            \
+    }
+
+  So the condition for using wvSplitK_hf_sml_ is (K_in * N_in <= max_lds_len) &&
+  (M_in % _YTILE == 0).
+
+  If this condition is true, then M_in is a multiple of _YTILE, and the kernel s
+  hould not have out-of-bounds issues... unless there's a bug in the kernel's lo
+  op logic.
+
+  Actually, wait. Let me re-read the kernel loop. At line 368 and 388:
+
+  uint32_t m = (blockIdx.x * _WvPrGrp + (threadIdx.y % _WvPrGrp)) * YTILE;
+  while (m < M) {
+    ...
+    m += CuCount * _WvPrGrp * YTILE;
+  }
+
+  So each thread (identified by threadIdx.y) starts at a different m value and i
+  ncrements by CuCount * _WvPrGrp * YTILE.
+
+  For example, if CuCount=100, _WvPrGrp=4, YTILE=2, then the increment is 800. T
+  hread 0 starts at m=0, thread 1 at m=2, etc.
+
+  In the first iteration, thread 0 processes m=0,1 (YTILE=2 rows). Thread 1 proc
+  esses m=2,3. Etc.
+
+  After the increment, thread 0 processes m=800,801. Thread 1 processes m=802,80
+  3. Etc.
+
+  If M=256, then in the first iteration, threads with m < 256 will process. Thre
+  ad 0: m=0, thread 1: m=2, ..., thread 127: m=254. All these are < 256.
+
+  After increment, m=800 for thread 0, which is >= 256, so the loop exits.
+
+  So far so good. But what if M=257? Then thread 128 would have m=256, which is
+  < 257, so it would enter the loop and try to process rows 256 and 257. But row
+  257 is out of bounds!
+
+  But wait, the dispatch condition is M_in % _YTILE == 0. If YTILE=2 and M=257,
+  then 257 % 2 = 1 != 0, so wvSplitK_hf_sml would not be used. Instead, wvSplitK
+  _hf_ would be used, which has commitColumn logic.
+
+  So in theory, wvSplitK_hf_sml_ should only be used when M is a multiple of YTI
+  LE, and there should be no out-of-bounds issues.
+
+  Unless... let me check if the test case M=256 is a multiple of the YTILE used.
+
+  Looking at the test output:
+
+  [FAIL] N=2,K=256,M=256,bias=0,pad_a=False,pad_b=True: skinny=True, max_err=0.2
+  09961
+
+  So N=2, K=256, M=256. Let me trace through the dispatch:
+
+  1. sYT = (M_in + CuCount * 4 - 1) / (CuCount * 4). Assuming CuCount is some va
+     like 100, sYT = (256 + 399) / 400 = 1.
+  2. Since N_in=2, we go to case 2: which calls WVSPLIT_TILE(sYT, 2).
+  3. In WVSPLIT_TILE, since _sYT = 1 <= 1, we call WVSPLITK(1, 4, 2).
+  4. In WVSPLITK, _YTILE=1, _UNRL=4, _N=2.
+  5. The condition (K_in * N_in <= max_lds_len) && (M_in % _YTILE == 0) is (256
+     <= 32768) && (256 % 1 == 0), which is true && true = true.
+
+  So wvSplitK_hf_sml_ is used with YTILE=1. Since M=256 is a multiple of YTILE=1
+  , there should be no out-of-bounds issue.
+
+  Hmm, so the bounds checking issue might not be the problem for this specific t
+  est case.
+
+  Let me think about this differently. The test shows that pad_b=True causes fai
+  lures. Let me create a simple test to debug this:
+• Used Shell (cd /workspace/vllm && /us...es: {out[0, :4]}') " 2>&1)
+• Interesting! The error is huge (82.0), and looking at the values, it seems lik
+  e the output is completely scrambled. The ref has [-2.2188, -32.2500, 20.3750,
+  -10.6875] but out has [-2.2188, 8.9375, 1.9141, 20.3750]. The first value matc
+  hes, but the rest are wrong.
+
+  This pattern suggests that the kernel is reading from wrong memory locations f
+  or the weight tensor.
+
+  Let me check if the issue is with how the weight data is being loaded. Looking
+  at the kernel code again at line 432-434:
+
+  const scalar_t* B_ = &B[(m + 0) * strideB + k_];
+  for (int y = 0; y < YTILE; y++)
+    bigB[y][k2].h8 = (loadnt((scalar8*)(&B_[y * strideB])));
+
+  Wait, I think I see the issue now! When we do &B_[y * strideB], we're computin
+  g: B + (m * strideB + k_) + y * strideB = B + (m+y) * strideB + k_
+
+  This is the address of element B[m+y, k_]. Then we load A_CHUNK/2 consecutive
+  floats from this address.
+
+  For a half tensor, this loads 8 consecutive halfs, which should be B[m+y, k_],
+  B[m+y, k_+1], ..., B[m+y, k_+7].
+
+  But wait! For a padded tensor, the elements B[m+y, k_] and B[m+y, k_+1] are ad
+  jacent in memory (stride(1) = 1). So loading 8 consecutive halfs should give t
+  he correct 8 columns.
+
+  Unless... OH! I think I finally see the bug!
+
+  Looking at line 434:
+
+  bigB[y][k2].h8 = (loadnt((scalar8*)(&B_[y * strideB])));
+
+  The type of B_ is const scalar_t* where scalar_t is half or bfloat16. So B_[y
+  * strideB] is a half value.
+
+  When we take &B_[y * strideB], we get a const half*. Then we cast to scalar8*
+  which is a float* (vector of 4 floats).
+
+  When we dereference this float*, we read 4 floats = 16 bytes = 8 halfs from th
+  e address.
+
+  But here's the issue: for a padded tensor, the memory layout within a row is s
+  till contiguous (stride(1) = 1). So 8 consecutive halfs in memory are 8 consec
+  utive columns in the same row. This should be correct.
+
+  Wait, let me double-check the padding. When we do F.pad(B, (0, num_pad), ...),
+  we're padding the last dimension. So for a tensor with shape [M, K], we add nu
+  m_pad elements to the end of each row.
+
+  After slicing [..., :-num_pad], we get a tensor with shape [M, K] but stride [
+  K + num_pad, 1].
+
+  So in memory, the layout is:
+
+  Row 0: [B00, B01, ..., B0(K-1), <pad0>, <pad1>, ..., <pad(num_pad-1)>]
+  Row 1: [B10, B11, ..., B1(K-1), <pad0>, <pad1>, ..., <pad(num_pad-1)>]
+  ...
+
+  The address of B[m, k_] is base + m * (K + num_pad) * 2 + k_ * 2 bytes (for ha
+  lf).
+
+  When we load 8 consecutive halfs from this address, we get B[m, k_], B[m, k_+1
+  ], ..., B[m, k_+7], assuming k_ + 7 < K.
+
+  This should be correct!
+
+  Let me check if there's an issue with how the kernel is dispatched. Maybe the
+  wrong kernel variant is being used?
+
+  Actually, let me add some debug output to understand what's happening:
+• Used Shell (cd /workspace/vllm && /us...t_padded[1, :8]}') " 2>&1)
+• Interesting! Looking at the output:
+
+  • Ref row 0: [-2.2188, -32.2500, 20.3750, -10.6875, -2.4688, -4.5312, 7.5625,
+    .1250]
+  • Out padded row 0: [-2.2188, 8.9375, 1.9141, 20.3750, -3.1406, -2.8594, -2.46
+    , -14.2500]
+
+  The first element matches (-2.2188), but the rest are scrambled. Looking more
+  carefully:
+
+  • Out[0, 1] = 8.9375, which is not in ref row 0
+  • Out[0, 2] = 1.9141, which is not in ref row 0
+  • Out[0, 3] = 20.3750, which IS in ref row 0 at position 2!
+  • Out[0, 6] = -2.4688, which IS in ref row 0 at position 4!
+
+  It looks like the kernel is reading every other element correctly but skipping
+  some. This pattern suggests the kernel might be reading with the wrong stride!
+
+  Let me check: if the kernel uses K instead of strideB somewhere, it would read
+  from the wrong positions.
+
+  For a padded tensor with strideB = 384 and K = 256:
+
+  • Correct address of B[m, k_] = m * 384 + k_
+  • Wrong address (using K) = m * 256 + k_
+
+  The difference is m * (384 - 256) = m * 128.
+
+  For m=0, both addresses are the same (k_). For m=1, correct is 384 + k_, wrong
+  is 256 + k_, difference is 128.
+
+  Hmm, but the pattern I see doesn't match this exactly. Let me think...
+
+  Actually, looking at the output more carefully:
+
+  • Out[0, 0] = -2.2188 = Ref[0, 0] ✓
+  • Out[0, 3] = 20.3750 = Ref[0, 2]
+  • Out[0, 6] = -2.4688 = Ref[0, 4]
+
+  It seems like every 3rd output element matches every 2nd ref element. This is
+  a strange pattern.
+
+  Wait, let me check if the issue is with how the data is loaded in chunks. The
+  kernel loads A_CHUNK=8 elements at a time. If there's a stride issue, it might
+  affect how these chunks are read.
+
+  Actually, I just realized something! Looking at line 434:
+
+  bigB[y][k2].h8 = (loadnt((scalar8*)(&B_[y * strideB])));
+
+  This loads from &B_[y * strideB]. But B_ is of type const scalar_t* (half*). W
+  hen we do B_[y * strideB], we're indexing as if B_ is an array of halfs.
+
+  So B_[y * strideB] is the half at position y * strideB from B_. Since B_ point
+  s to B[m, k_], this is B[m, k_] + y * strideB in terms of half elements, which
+  is B[m + y, k_] (correct!).
+
+  Then &B_[y * strideB] is the address of this half. We cast to scalar8* and loa
+  d 4 floats = 8 halfs.
+
+  This should read B[m+y, k_], B[m+y, k_+1], ..., B[m+y, k_+7].
+
+  But wait! What if the issue is that strideB is being used incorrectly in the i
+  ndexing?
+
+  Let me check: B_[y * strideB] indexes strideB half elements per row. For a pad
+  ded tensor, strideB = 384. So B_[384] is 384 halfs from B_, which is B[m+1, k_
+  ] (correct!).
+
+  But then when we load 8 consecutive halfs from &B_[y * strideB], we read B[m+y
+  , k_], ..., B[m+y, k_+7]. This should be correct!
+
+  Unless... OH! I think I see the bug now!
+
+  Looking at line 432-434 again:
+
+  const scalar_t* B_ = &B[(m + 0) * strideB + k_];
+  for (int y = 0; y < YTILE; y++)
+    bigB[y][k2].h8 = (loadnt((scalar8*)(&B_[y * strideB])));
+
+  The issue is that B_ is a const scalar_t* (half*). When we do B_[y * strideB],
+  we're indexing by y * strideB half elements, not bytes!
+
+  For y=1 and strideB=384, B_[384] is the 384th half from B_, which is correct f
+  or accessing the next row.
+
+  But then &B_[y * strideB] is the address of this half. When we cast to scalar8
+  * and load, we read 8 consecutive halfs from this address.
+
+  For a padded tensor, 8 consecutive halfs starting from B[m+y, k_] are B[m+y, k
+  _], B[m+y, k_+1], ..., B[m+y, k_+7]. This is correct!
+
+  So the load should be correct...
+
+  Wait, let me re-examine the issue. Maybe the problem is not with the load but
+  with how the data is used later.
+
+  Actually, I just noticed something in the test output. Let me look at the patt
+  ern again:
+
+  • Ref row 0: [-2.2188, -32.2500, 20.3750, -10.6875, -2.4688, -4.5312, 7.5625,
+    .1250]
+  • Out padded row 0: [-2.2188, 8.9375, 1.9141, 20.3750, -3.1406, -2.8594, -2.46
+    , -14.2500]
+
+  Out[0, 0] = Ref[0, 0] ✓ Out[0, 3] = Ref[0, 2] Out[0, 6] = Ref[0, 4]
+
+  So Out[0, 3i] = Ref[0, 2i] for i=0,1,2. This suggests the kernel is reading 2/
+  3 of the elements correctly but at wrong positions.
+
+  Actually wait, that's not quite right either. Let me look more carefully:
+
+  • Out[0, 0] = -2.2188 = Ref[0, 0]
+  • Out[0, 3] = 20.3750 = Ref[0, 2]
+  • Out[0, 6] = -2.4688 = Ref[0, 4]
+
+  So the pattern is Out[0, 3k] = Ref[0, 2k]. This is strange...
+
+  Actually, I wonder if the issue is with how the weight is being indexed in the
+  kernel. Let me check the relationship between the kernel's view of the weight
+  and the actual memory layout.
+
+  In the kernel, B is the weight with shape [M, K] = [256, 256] and strideB = 38
+  4.
+
+  When the kernel accesses B[m, k_], it computes the address as m * strideB + k_
+  = m * 384 + k_ (in half elements).
+
+  For m=0, k_=0: address = 0. This is B[0, 0]. For m=0, k_=1: address = 1. This
+  is B[0, 1]. ... For m=1, k_=0: address = 384. This is B[1, 0].
+
+  But wait, in memory, B[1, 0] is at position 384 (after 256 data elements + 128
+  padding elements of row 0). So the address calculation is correct!
+
+  Let me think about this differently. Maybe the issue is with how the kernel is
+  launched or how the parameters are passed.
+
+  Let me check the Python-to-C++ interface:
+• Used Grep (wvSplitK)
+•
+• Used Grep (def wvSplitK)
+•
+• Used ReadFile (vllm/vllm/_custom_ops.py)
+• So the Python function wvSplitK(a, b, cu_count, bias) calls torch.ops._rocm_C.
+  wvSplitK(a, b, bias, cu_count).
+
+  In utils.py line 202:
+
+  out = ops.wvSplitK(weight, x_view, cu_count, bias)
+
+  So a = weight and b = x_view (activation).
+
+  In the C++ function at line 1305:
+
+  torch::Tensor wvSplitK(const at::Tensor& in_a, const at::Tensor& in_b, ...)
+
+  So in_a = weight and in_b = activation. This matches my earlier analysis.
+
+  Now, the issue might be in how the strides are obtained. Let me check line 132
+  1-1322 again:
+
+  auto strideA_in = in_b.stride(0);  // activation stride
+  auto strideB_in = in_a.stride(0);  // weight stride
+
+  So strideB_in = in_a.stride(0) = weight.stride(0). For a padded weight with sh
+  ape [256, 256] and stride (384, 1), this is 384. Correct!
+
+  And strideA_in = in_b.stride(0) = activation.stride(0). For a contiguous activ
+  ation with shape [4, 256] and stride (256, 1), this is 256. Correct!
+
+  These are then passed to the kernel at line 1347:
+
+  wvSplitK_hf_sml_<...>(..., strideA_in, strideB_in);
+
+  So the kernel receives strideA = 256 and strideB = 384. Correct!
+
+  OK so the parameters are being passed correctly. The issue must be in the kern
+  el itself.
+
+  Let me look at the kernel code one more time, very carefully. At line 432-434:
+
+  const scalar_t* B_ = &B[(m + 0) * strideB + k_];
+  for (int y = 0; y < YTILE; y++)
+    bigB[y][k2].h8 = (loadnt((scalar8*)(&B_[y * strideB])));
+
+  Hmm, I just noticed that B_ is computed as &B[(m + 0) * strideB + k_]. The (m
+  + 0) is odd - why not just m?
+
+  Actually, that's probably just a coding style thing and doesn't affect correct
+  ness.
+
+  Let me think about this more carefully. The load at line 434 reads 8 consecuti
+  ve halfs from &B_[y * strideB].
+
+  For y=0: &B_[0] = address of B[m, k_]. Load reads B[m, k_], ..., B[m, k_+7]. F
+  or y=1: &B_[strideB] = address of B[m, k_] + strideB halfs = address of B[m+1,
+  k_]. Load reads B[m+1, k_], ..., B[m+1, k_+7].
+
+  This looks correct!
+
+  Wait, but I should double-check the pointer arithmetic. B_ is of type const sc
+  alar_t* = const half*. When we do B_[y * strideB], we're indexing by y * strid
+  eB elements of type half.
+
+  So B_[y * strideB] is the half at position y * strideB from B_. Since B_ point
+  s to B[m, k_], and the tensor has row stride strideB, the half at position y *
+  strideB is B[m+y, k_]. Correct!
+
+  Then &B_[y * strideB] is the address of this half. We cast to scalar8* and loa
+  d 8 consecutive halfs.
+
+  For a padded tensor, the 8 consecutive halfs starting from B[m+y, k_] are B[m+
+  y, k_], B[m+y, k_+1], ..., B[m+y, k_+7]. This is correct because within a row,
+  elements are contiguous (stride(1) = 1).
+
+  So the load should be correct!
+
+  Let me check if there's an issue with how the loaded data is used. Looking at
+  the multiplication at line 463-467:
+
+  for (uint32_t b = 0; b < A_CHUNK / 2; b++) {
+    DOT2C(sum[n][y], bigA[n][k2].f[b], bigB[y][k2].f[b])
+  }
+
+  This does sum += bigA.f[b] * bigB.f[b] for b = 0, 1, 2, 3.
+
+  bigA[n][k2].f[b] is a float from the activation. bigB[y][k2].f[b] is a float f
+  rom the weight.
+
+  The DOT2C macro at line 288-295:
+
+  #define DOT2C(V0, V2, V3)
+  \
+    if constexpr (std::is_same_v<scalar_t, half>) {
+  \
+      asm("v_dot2c_f32_f16 %0, %2, %3" : "=v"(V0) : "0"(V0), "v"(V2), "v"(V3));
+  \
+    } else if constexpr (std::is_same_v<scalar_t, __hip_bfloat16>) {
+  \
+      float2 s = __bfloat1622float2(*((__hip_bfloat162*)(&(V2)))) *
+  \
+                 __bfloat1622float2(*((__hip_bfloat162*)(&(V3))));
+  \
+      V0 += (s.x + s.y);
+  \
+    }
+
+  For bfloat16, this converts two bfloat16s to a float2, multiplies, and sums.
+
+  So bigA.f[b] and bigB.f[b] are each treated as containing 2 bfloat16s packed i
+  nto a float. The DOT2C multiplies these pairs and accumulates.
+
+  Wait, this is getting complicated. Let me check the type definitions.
+
+  At line 319-330:
+
+  using scalar8 =
+      __attribute__((__vector_size__((A_CHUNK / 2) * sizeof(float)))) float;
+  using half4 =
+      __attribute__((__vector_size__((A_CHUNK / 2) * sizeof(__bf16)))) __bf16;
+  union bigType {
+    scalar_t h[A_CHUNK];
+    float f[A_CHUNK / 2];
+    float2 f2[A_CHUNK / 4];
+    double d[A_CHUNK / 4];
+    half4 h4[A_CHUNK / 4];
+    scalar8 h8;
+  };
+
+  So bigType is a union with:
+
+  • h[A_CHUNK] = 8 scalar_t (half or bfloat16)
+  • f[A_CHUNK/2] = 4 floats
+  • h8 = scalar8 = vector of 4 floats
+
+  When we load with bigB[y][k2].h8 = ..., we're loading 4 floats into the h8 mem
+  ber.
+
+  Then when we access bigB[y][k2].f[b], we're accessing the b-th float from the
+  f array.
+
+  Since h8 and f overlap in the union, bigB[y][k2].h8 loads 4 floats, and bigB[y
+  ][k2].f[b] accesses the b-th float.
+
+  For bfloat16, each float contains 2 bfloat16s packed. So 4 floats contain 8 bf
+  loat16s, which matches A_CHUNK = 8.
+
+  OK so the data loading and access looks correct.
+
+  Let me try a different approach. Let me check if the shared memory (LDS) size
+  calculation might be wrong. The hint mentions "Verify LDS usage calculation us
+  es the correct stride variable."
+
+  Looking at line 312:
+
+  constexpr int max_lds_len = LDS_SIZE / 2;
+
+  And line 339:
+
+  __shared__ scalar_t s[max_lds_len];
+
+  The LDS is used to store activation data. At line 351-363, activation is loade
+  d:
+
+  for (uint32_t k = 0; k < min__(K * N, max_lds_len);
+       k += THRDS * WvPrGrp * A_CHUNK) {
+    ...
+    uint32_t global_idx = row * strideA + col;
+    *((bigType*)(&s[k_in])) = *((bigType*)(&A[global_idx]));
+  }
+
+  The amount of data loaded is min__(K * N, max_lds_len) elements. This uses K,
+  not strideA.
+
+  For activation with shape [N, K] and strideA, the logical size is N * K, but t
+  he physical size is N * strideA.
+
+  The LDS stores only the logical N * K elements, which is correct because we're
+  packing the activation data without padding.
+
+  But wait, what if K * N > max_lds_len? Then we can't fit all activation data i
+  n LDS, and we use wvSplitK_hf_ or wvSplitK_hf_big_ instead.
+
+  Actually, I wonder if the issue is with the LDS size check in the dispatch. Lo
+  oking at line 1343:
+
+  if ((K_in * N_in <= max_lds_len) && (M_in % _YTILE == 0))
+
+  This checks K_in * N_in <= max_lds_len. But K_in and N_in are the logical dime
+  nsions. For padded activation, the physical size is larger.
+
+  But the LDS only needs to store the logical data, not the padding. So this che
+  ck should be correct.
+
+  Hmm, let me think about this from a different angle. The test shows that pad_a
+  =True works but pad_b=True fails. This strongly suggests the issue is specific
+  ally with strideB handling.
+
+  Let me look at all the places where strideB is used in the kernel:
+• Used Grep (strideB)
+• I see strideB is used at lines 432, 434, 738, 740, 1108, 1110 in the three ker
+  nel variants. The pattern is consistent:
+
+  1. B_ = &B[m * strideB + k_] - base address for row m, column k_
+  2. &B_[y * strideB] - address for row m+y, column k_
+
+  This looks correct to me.
+
+  Wait, I just realized something! Let me check the type of the index. At line 4
+  32:
+
+  const scalar_t* B_ = &B[(m + 0) * strideB + k_];
+
+  Here, m, strideB, and k_ are all integers. The multiplication m * strideB coul
+  d overflow if the values are large!
+
+  But for our test case, m < 256 and strideB = 384, so m * strideB < 256 * 384 =
+  98304, which fits in a 32-bit integer. So overflow shouldn't be an issue.
+
+  Let me try adding some debug prints to understand what's happening. Actually,
+  I can't easily add debug prints to a GPU kernel and rebuild quickly.
+
+  Let me think about this more carefully. The error pattern shows that some elem
+  ents are correct and some are wrong. This suggests the kernel is reading from
+  partially correct addresses.
+
+  Actually, wait! I just realized something important. Let me check the kernel p
+  arameter order again.
+
+  At line 307-311:
+
+  wvSplitK_hf_sml_(const int K, const int M, const int Bx, const int By,
+                   const scalar_t* B, const scalar_t* __restrict__ A,
+                   const scalar_t* __restrict__ BIAS, scalar_t* C,
+                   const int _WvPrGrp, const int CuCount, const int strideA,
+                   const int strideB)
+
+  So the parameters are: K, M, Bx, By, B, A, BIAS, C, _WvPrGrp, CuCount, strideA
+  , strideB.
+
+  And at line 1344-1347:
+
+  wvSplitK_hf_sml_<fptype, 64, _YTILE, 16, 8, _UNRL, _N>
+      <<<grid, block, 0, stream>>>(K_in, M_in, Bx_in, By_in, af4, bf4, ...
+
+  So the call passes: K_in, M_in, Bx_in, By_in, af4, bf4, biasf4, c, __wvPrGrp,
+  CuCount, strideA_in, strideB_in.
+
+  Where:
+
+  • af4 = in_a.data_ptr() = weight
+  • bf4 = in_b.data_ptr() = activation
+  • strideA_in = in_b.stride(0) = activation stride
+  • strideB_in = in_a.stride(0) = weight stride
+
+  So the kernel receives:
+
+  • B = af4 = weight
+  • A = bf4 = activation
+  • strideA = strideA_in = activation stride
+  • strideB = strideB_in = weight stride
+
+  This matches the kernel's expectation: strideA is for A (activation), strideB
+  is for B (weight). Good!
+
+  OK so the parameters are correct. Let me look at the actual memory access one
+  more time.
+
+  Actually, I just thought of something. Let me check if there's an issue with h
+  ow the weight tensor is created or passed from Python.
+
+  In the test:
+
+  B_padded = F.pad(B, (0, num_pad), 'constant', 0)[..., :-num_pad]
+  out = ops.wvSplitK(B_padded, A.reshape(-1, A.size(-1)), cu)
+
+  So B_padded is passed as the first argument (in_a = weight), and A.reshape(...
+  ) is passed as the second argument (in_b = activation).
+
+  Wait, A.reshape(-1, A.size(-1)) might create a view that's not contiguous! Let
+  me check:
+• Used Shell (cd /workspace/vllm && /us...is_contiguous()}') " 2>&1)
+• OK so the reshape preserves the stride. Good.
+
+  Let me try a different debugging approach. Let me check if the kernel is actua
+  lly being called with the right parameters by looking at what kernel variant i
+  s selected:
+• Used Shell (cd /workspace/vllm && /us...wvSplitK_hf_big_') " 2>&1)
+• Interesting! GrpsShrB = min(4 // 16, 4) = min(0, 4) = 0. This seems wrong - it
+  should be at least 1!
+
+  But this is for the wvSplitKrc path, not the wvSplitK path. For wvSplitK, we u
+  se YTILE=1.
+
+  So the kernel variant is wvSplitK_hf_sml_ with YTILE=1. This is the "small" va
+  riant that fits all activation data in LDS.
+
+  Now, with YTILE=1, each thread processes 1 column of the weight matrix. Let me
+  trace through the kernel logic for this case.
+
+  At line 368:
+
+  uint32_t m = (blockIdx.x * _WvPrGrp + (threadIdx.y % _WvPrGrp)) * YTILE;
+
+  With YTILE=1, m = blockIdx.x * _WvPrGrp + (threadIdx.y % _WvPrGrp).
+
+  At line 341-342, _WvPrGrp = mindiv(M_in, CuCount * _YTILE, 16). With M_in=256,
+  CuCount=256, _YTILE=1:
+
+  • mindiv(256, 256 * 1, 16) = mindiv(256, 256, 16)
+
+  Let me check what mindiv does:
+• Used ReadFile (vllm/csrc/rocm/skinny_gemms.cu)
+• The mindiv function finds the minimum value of div2 (up to 13 iterations) that
+  doesn't increase the ceiling division result.
+
+  For mindiv(256, 256, 16):
+
+  • nPrRnd = 256 * 16 = 4096
+  • rnds[0] = (256 + 4096 - 1) / 4096 = 4351 / 4096 = 1
+  • rnds[1] = (256 + 3840 - 1) / 3840 = 4095 / 3840 = 1
+  • ...
+  • Eventually when nPrRnd becomes small enough, rnds[i] will become 2.
+
+  Let me compute a few more:
+
+  • rnds[0] with nPrRnd = 4096: (256 + 4095) / 4096 = 1
+  • rnds[15] with nPrRnd = 256 * 1 = 256: (256 + 255) / 256 = 1
+
+  Actually, for all values where nPrRnd >= 256, we have (256 + nPrRnd - 1) / nPr
+  Rnd = 1 (since 256 <= nPrRnd).
+
+  When nPrRnd = 256 * (16-15) = 256 * 1 = 256 (i = 15), rnds[15] = (256 + 255) /
+  256 = 1.
+
+  When nPrRnd = 256 * (16-16) = 0 (i = 16), we'd have division by zero, but the
+  loop only goes to i=12.
+
+  So for i = 0 to 12, nPrRnd = 256 * (16 - i) ranges from 4096 to 1024. And (256
+  + nPrRnd - 1) / nPrRnd = 1 for all these.
+
+  So rnds[0] = rnds[1] = ... = rnds[12] = 1. The function returns div2 - 12 = 16
+  - 12 = 4.
+
+  So _WvPrGrp = 4.
+
+  With _WvPrGrp = 4, blockIdx.x from 0 to CuCount-1 = 255, and threadIdx.y from
+  0 to 15:
+
+  • m = (blockIdx.x * 4 + (threadIdx.y % 4)) * 1
+
+  For blockIdx.x = 0:
+
+  • threadIdx.y = 0: m = 0
+  • threadIdx.y = 1: m = 1
+  • threadIdx.y = 2: m = 2
+  • threadIdx.y = 3: m = 3
+  • threadIdx.y = 4: m = 0 (since 4 % 4 = 0)
+  • ...
+
+  So within a block, threads with threadIdx.y % 4 == 0 all work on m = 0, 4, 8,
+  ... (after the persistent loop).
+
+  Actually, looking at line 568:
+
+  m += CuCount * _WvPrGrp * YTILE;
+
+  With CuCount=256, _WvPrGrp=4, YTILE=1: m += 256 * 4 * 1 = 1024.
+
+  So after the first iteration, m increases by 1024. Since M=256, the loop condi
+  tion m < M becomes false, and the loop exits after one iteration.
+
+  So each thread processes exactly one value of m in the range [0, 255].
+
+  Now, for the weight loading at line 432-434:
+
+  const scalar_t* B_ = &B[(m + 0) * strideB + k_];
+  for (int y = 0; y < YTILE; y++)
+    bigB[y][k2].h8 = (loadnt((scalar8*)(&B_[y * strideB])));
+
+  With YTILE=1, the loop runs once with y=0:
+
+  const scalar_t* B_ = &B[m * strideB + k_];
+  bigB[0][k2].h8 = (loadnt((scalar8*)(&B_[0])));
+
+  So B_ points to B[m, k_], and we load from &B_[0] = B_, which is B[m, k_].
+
+  The load reads 8 consecutive halfs (4 floats) from B[m, k_]. For a padded tens
+  or, this should be B[m, k_], B[m, k_+1], ..., B[m, k_+7].
+
+  Wait, but B_ is of type const scalar_t* = const half*. So &B_[0] = B_, and loa
+  ding scalar8 (4 floats = 8 halfs) from this address reads 8 consecutive halfs.
+
+  For a padded tensor with strideB = 384, the memory layout is:
+
+  Row 0: [B00, B01, ..., B0(255), <128 padding>]
+  Row 1: [B10, B11, ..., B1(255), <128 padding>]
+  ...
+
+  The address of B[m, k_] is m * 384 + k_ (in half elements).
+
+  When we load 8 consecutive halfs from this address, we get B[m, k_], B[m, k_+1
+  ], ..., B[m, k_+7].
+
+  This should be correct!
+
+  Unless... wait, let me check if there's an issue with the type punning. When w
+  e cast const half* to scalar8* (which is float* essentially) and load, we're r
+  eading 4 floats = 16 bytes = 8 halfs.
+
+  But the alignment might be an issue. For a half pointer, the alignment is 2 by
+  tes. For a float pointer, the alignment is 4 bytes. For a scalar8 (vector of 4
+  floats), the alignment might be 16 bytes.
+
+  If B[m, k_] is not 16-byte aligned, the load might be incorrect or inefficient
+  .
+
+  Let me check the alignment. For a padded tensor:
+
+  • Address of B[m, k_] in bytes = base + (m * 384 + k_) * 2 (since half is 2 by
+    s).
+  • For 16-byte alignment, we need (m * 384 + k_) * 2 divisible by 16, i.e., m *
+    84 + k_ divisible by 8.
+
+  Since 384 = 48 * 8, we have m * 384 divisible by 8. And k_ is a multiple of 8
+  (from line 428: k_ = k + threadIdx.x * A_CHUNK where k is a multiple of A_CHUN
+  KUNRL = 84 = 32, and A_CHUNK = 8).
+
+  So m * 384 + k_ is divisible by 8, and the address is 16-byte aligned. Good!
+
+  OK so alignment shouldn't be an issue either.
+
+  Let me try yet another approach. Let me check if the issue might be with how t
+  he result is written back. Looking at line 516:
+
+  C[m + i + n * M] = __float2s<scalar_t>(sum[n][i]);
+
+  With YTILE=1, i=0:
+
+  C[m + n * M] = __float2s<scalar_t>(sum[n][0]);
+
+  For output C with shape [N, M] = [4, 256], the element at [n, m] is at index n
+  * M + m = n * 256 + m.
+
+  The code writes to m + n * M = n * M + m. This is correct!
+
+  Hmm, I'm running out of ideas. Let me check if there's something wrong with ho
+  w the activation data is loaded from LDS.
+
+  Looking at line 446-448:
+
+  for (int n = 0; n < N; n++) {
+    bigA[n][k2] = *((const bigType*)(&(s[k_ + K * n])));
+  }
+
+  This reads activation from LDS at position k_ + K * n. For activation with sha
+  pe [N, K], the element A[n, k_] should be at LDS position n * K + k_ (or k_ +
+  K * n, same thing).
+
+  The LDS is populated at line 351-363:
+
+  for (uint32_t k = 0; k < min__(K * N, max_lds_len);
+       k += THRDS * WvPrGrp * A_CHUNK) {
+    uint32_t k_in = k + ((threadIdx.y * THRDS + threadIdx.x) * A_CHUNK);
+
+    if (k_in >= min__(K * N, max_lds_len)) break;
+
+    // Compute 2D index for strided access: row = k_in / K, col = k_in % K
+    // Then global address = row * strideA + col
+    uint32_t row = k_in / K;
+    uint32_t col = k_in % K;
+    uint32_t global_idx = row * strideA + col;
+    *((bigType*)(&s[k_in])) = *((bigType*)(&A[global_idx]));
+  }
+
+  So k_in = row * K + col, and we load from A[row * strideA + col] into s[k_in].
+
+  For activation with shape [N, K] = [4, 256] and strideA = 256 (contiguous in t
+  his test):
+
+  • row = k_in / K ranges from 0 to N-1 = 3.
+  • col = k_in % K ranges from 0 to K-1 = 255.
+  • global_idx = row * strideA + col = row * 256 + col.
+
+  For a contiguous activation, strideA = K = 256, so global_idx = row * 256 + co
+  l, which is the correct index for A[row, col].
+
+  The data is stored in LDS at position k_in = row * K + col = row * 256 + col.
+
+  Later, at line 447, we read from s[k_ + K * n]. For a given n and k_, this is
+  s[k_ + 256 * n].
+
+  Comparing with the LDS layout, s[row * 256 + col] stores A[row, col]. So s[256
+  * n + k_] stores A[n, k_]. This is correct!
+
+  OK so the activation loading also looks correct.
+
+  I'm stuck. Let me try a different approach - maybe I should just look for obvi
+  ous bugs in the code.
+
+  Actually, wait! I just noticed something. Looking at line 432-434 again:
+
+  const scalar_t* B_ = &B[(m + 0) * strideB + k_];
+  for (int y = 0; y < YTILE; y++)
+    bigB[y][k2].h8 = (loadnt((scalar8*)(&B_[y * strideB])));
+
+  The issue might be with the indexing B_[y * strideB]. Let me think about this
+  more carefully.
+
+  B_ is of type const scalar_t* = const half*. When we do B_[y * strideB], we're
+  indexing by y * strideB elements of type half.
+
+  For y=1 and strideB=384, B_[384] is the 384th half from B_. Since B_ points to
+  B[m, k_], and the tensor has row stride 384, the 384th half from B_ is B[m+1,
+  k_]. Correct!
+
+  But then &B_[y * strideB] is the address of B[m+y, k_]. When we cast to scalar
+  8* and load, we read 8 consecutive halfs from this address.
+
+  For a padded tensor, 8 consecutive halfs starting from B[m+y, k_] are B[m+y, k
+  _], B[m+y, k_+1], ..., B[m+y, k_+7]. This is correct!
+
+  Unless... OH WAIT! I think I finally see the bug!
+
+  Looking at line 434:
+
+  bigB[y][k2].h8 = (loadnt((scalar8*)(&B_[y * strideB])));
+
+  The type of &B_[y * strideB] is const half*. We cast to scalar8* and load.
+
+  But scalar8 is defined as:
+
+  using scalar8 =
+      __attribute__((__vector_size__((A_CHUNK / 2) * sizeof(float)))) float;
+
+  For A_CHUNK=8, scalar8 is a vector of 4 floats. When we load this from a half*
+  address, we're reading 16 bytes = 8 halfs.
+
+  But here's the issue: when we cast a half* to a float* and dereference, the ha
+  rdware might interpret the bytes differently!
+
+  Actually no, that's not right either. Loading 16 bytes from an address gives t
+  he same 16 bytes regardless of the type. The type only affects how the bytes a
+  re interpreted.
+
+  Hmm, but bigB[y][k2].h8 is of type scalar8 = vector of 4 floats. And bigB[y][k
+  2].f[b] accesses the b-th float.
+
+  Later, at line 466, we do DOT2C(sum[n][y], bigA[n][k2].f[b], bigB[y][k2].f[b])
+  .
+
+  For bfloat16, DOT2C does:
+
+  float2 s = __bfloat1622float2(*((__hip_bfloat162*)(&(V2)))) *
+             __bfloat1622float2(*((__hip_bfloat162*)(&(V3))));
+  V0 += (s.x + s.y);
+
+  So it treats V2 and V3 (which are floats) as containing 2 bfloat16s each, conv
+  erts to float2, multiplies, and sums.
+
+  So bigB[y][k2].f[b] is a float that contains 2 bfloat16s packed. When we load
+  8 halfs into bigB[y][k2].h8, these 8 halfs are stored as 4 floats in the f arr
+  ay.
+
+  Wait, but the loading is done via h8, and the access is via f. Let me check if
+  there's an endianness or packing issue.
+
+  Actually, I think the issue might be simpler. Let me re-read the load:
+
+  bigB[y][k2].h8 = (loadnt((scalar8*)(&B_[y * strideB])));
+
+  This loads 4 floats from &B_[y * strideB]. But B_[y * strideB] is a half value
+  . So &B_[y * strideB] is a half*.
+
+  When we cast to scalar8* and load, we read 16 bytes starting from this half. T
+  hese 16 bytes contain 8 halfs.
+
+  But the issue is: which 8 halfs? Starting from B[m+y, k_], the next 8 halfs in
+  memory are B[m+y, k_], B[m+y, k_+1], ..., B[m+y, k_+7].
+
+  For a contiguous tensor, this is correct. For a padded tensor, within a row, e
+  lements are still contiguous (stride(1) = 1). So the 8 halfs are still B[m+y,
+  k_], ..., B[m+y, k_+7].
+
+  So the load should be correct!
+
+  OK I really need to look at this from a different angle. Let me check if maybe
+  the issue is that the kernel source was modified but not rebuilt. The test har
+  ness said "_rocm_C.so is OLDER than kernel source".
+
+  Let me check the timestamps:
+• Used Shell (ls -la /workspace/vllm/bu...e f 2>/dev/null | head -5)
+•
+• Used Shell (ls -la /workspace/vllm/vl...csrc/rocm/skinny_gemms.cu)
+• The .so file (21:34) is older than the kernel source (21:38)! This confirms th
+  e test harness warning. The kernel source has been modified but not rebuilt.
+
+  This explains why the tests are failing - the old kernel code (without proper
+  strideB support) is still being used!
+
+  I need to rebuild the vllm package. Let me do that:
+• Used Shell (cd /workspace/vllm && VLL...isolation 2>&1 | tail -50)
+  Killed by timeout (300s)
+• The build is taking too long. Let me check if there's a way to do a partial re
+  build or if the build is stuck:
+• Used Shell (ps aux | grep -E "(pip|ni...|hipcc|clang)" | head -10)
+• Good, the build is still running (ninja is compiling). Let me wait for it to c
+  omplete. Let me check the build progress:
+• Used Shell (sleep 180 && ls -la /work..."Build still in progress")
+• The timestamp is still 21:34, which means the build didn't update the .so file
+  . Let me check if the build actually succeeded or failed:
+• Used Shell (ps aux | grep -E "(pip|ni... | grep -v grep | head -5)
+• The build is still running (ninja is still active). Let me wait longer for it
+  to complete:
+• Used Shell (sleep 300 && ls -la /work...ocm_C.abi3.so 2>/dev/null)
+  Invalid arguments
+•
+• Used Shell (sleep 300 && ls -la /work...ocm_C.abi3.so 2>/dev/null)
+  Killed by timeout (300s)
+• The build is taking very long. Let me check if it's still running and what's h
+  appening:
+• Used Shell (ps aux | grep -E "ninja.*_rocm_C" | grep -v grep)
+• The ninja build is still running. Let me wait a bit more and check the .so fil
+  e timestamp:
+• Used Shell (sleep 120 && ls -la /work...i3.so 2>/dev/null && date)
+• The .so file timestamp is still 21:34, which means the build hasn't completed
+  yet or there's an issue. Let me check if ninja is still actively building:
+• Used Shell (ps aux | grep ninja | gre...ng | grep -v grep | wc -l)
+• There's still 1 ninja process and 6 clang processes running. The build is stil
+  l in progress. Let me wait more:
+• Used Shell (sleep 180 && ls -la /work...m/_rocm_C.abi3.so && date)
+• The build is taking extremely long. Let me check if there's a way to see the b
+  uild progress or if it's stuck:
+• Used Shell (ps aux | grep -E "clang.*... | grep -v grep | head -3)
+• No clang process is currently compiling skinny_gemms. Let me check what's bein
+  g compiled:
+• Used Shell (ps aux | grep clang | grep -v grep | head -5)
+• The build is still compiling attention.hip, not skinny_gemms.cu. This is a ful
+  l rebuild of the _rocm_C extension which includes many files. The build will t
+  ake a while.
+
+  Let me wait for the build to complete and then run the tests. Given the build
+  is progressing, let me wait more:
+• Used Shell (sleep 300 && ls -la /work...ja | grep -v grep | wc -l)
+  Killed by timeout (300s)
+• The build is still running. Let me check if it's making progress by looking at
+  the .so file size or timestamp:
+• Used Shell (ls -la /workspace/vllm/vl...g" | grep -v grep | wc -l)
+• The .so file was updated at 22:25 (now it's 22:29), and there are no more ninj
+  a or clang processes. The build has completed!
+
+  Now let me run the test to see if the padding support works:
+• Used Shell (cd /workspace/vllm && /us...().max().item()}') " 2>&1)
+• Excellent! The max error is now 0.0! The rebuild fixed the issue - the kernel
+  now correctly handles padded weight tensors!
+
+  Now let me run the full test harness to see the complete score:
+• Used Shell (cd /workspace/vllm && /us...pace/test_harness.py 2>&1)
+• All tests pass with a perfect score of 100.0!
+
+  Now let me update the optimization state file and run the final benchmark:
+• Used ReadFile (optimization_state.json)
+• Now let me update the optimization state with the completed work:
+• Used WriteFile (optimization_state.json)
+• Now let me run the final benchmark command directly as required:
+• Used Shell (cd /workspace/vllm && /us...workspace/test_harness.py)
+• The task is complete with a perfect score of 100.0!
+
+  Summary
+
+  The issue was that the kernel source code from stage2 already had the correct
+  strideA and strideB support implemented for handling padded tensors, but the c
+  ompiled extension (_rocm_C.abi3.so) was older than the kernel source. This cau
+  sed the tests to fail because they were running the old kernel code without pr
+  oper stride support.
+
+  The fix was simply to rebuild the vllm extension:
+
+  cd /workspace/vllm && VLLM_TARGET_DEVICE=rocm pip install -e . --no-build-isol
+  ation
+
+  After the rebuild, all tests pass:
+
+  • Tier 0 (Profiling Evidence): 15/15 ✓
+  • Tier 1 (Padded Tensor Correctness): 40/40 ✓ - All 20 padded tensor tests pas
+    with 0 error
+  • Tier 2 (Non-Padded Regression): 20/20 ✓ - All 9 regression tests pass
+  • Tier 3 (Integration Checks): 25/25 ✓ - All integration checks pass
+
+  Total Score: 100.0/100.0
+
+  The key lesson learned is that after modifying CUDA/HIP kernel source code, it
+  's critical to verify that the compiled extension is rebuilt and up-to-date. T
+  he test harness correctly detected this issue with the "_rocm_C.so is OLDER th
+  an kernel source" check.
+• The task is fully complete with a perfect score of 100.0/100.0, exceeding the
+  goal of >=85.0. All tests pass across all tiers:
+
+  • Tier 0: 15/15 (Profiling Evidence)
+  • Tier 1: 40/40 (Padded Tensor Correctness)
+  • Tier 2: 20/20 (Non-Padded Regression)
+  • Tier 3: 25/25 (Integration Checks)
+
+  The fix was rebuilding the vllm extension (pip install -e . --no-build-isolati
+  on) after the kernel source changes from stage2. The kernel already had correc
+  t strideA and strideB support implemented, but the compiled .so file was outda
+  ted, causing tests to run old kernel code.
+
+  <choice>STOP</choice>

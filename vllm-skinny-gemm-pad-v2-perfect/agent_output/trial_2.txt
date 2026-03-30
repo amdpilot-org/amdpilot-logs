@@ -1,0 +1,1225 @@
+•
+• Used ReadFile (optimization_state.json)
+•
+• Used ReadFile (.amdpilot/env.md)
+•
+• Used ReadFile (.amdpilot/environment.md)
+• Let me read the skill documentation and then examine the key files for this ta
+  sk.
+• Used ReadFile (skills/amd-kernel-optimization/SKILL.md)
+•
+• Used Glob (**/skinny_gemms.cu)
+  Unsafe pattern
+•
+• Used Glob (**/utils.py)
+  Unsafe pattern
+•
+• Used Glob (vllm/**/skinny_gemms.cu)
+•
+• Used Glob (vllm/**/utils.py)
+• Now let me read the key files - the skinny_gemms.cu kernel and the utils.py ro
+  uting function:
+• Used ReadFile (vllm/csrc/rocm/skinny_gemms.cu)
+•
+• Used ReadFile (vllm/vllm/model_executor/layers/utils.py)
+• Now I have a clear picture. Let me read more of the skinny_gemms.cu file to se
+  e the dispatch macros and understand the full kernel structure:
+• Used ReadFile (vllm/csrc/rocm/skinny_gemms.cu)
+• Let me continue reading the rest of the file to see the full dispatch and the
+  wvSplitKrc implementation:
+• Used ReadFile (vllm/csrc/rocm/skinny_gemms.cu)
+• Now I have a comprehensive understanding of the code. Let me analyze the key f
+  indings:
+
+  1. The kernels already have strideA parameter - Looking at the kernel signatur
+     (lines 307-310, 587-590, 911-914), they all accept const int strideA as the
+     st parameter.
+  2. The dispatch function wvSplitK already extracts stride - Line 1311 shows au
+     strideA_in = in_a.stride(0); and this is passed to the kernels (lines 1336,
+     41, 1346).
+  3. However, there are issues in the kernel code:
+    • In wvSplitK_hf_sml_ (lines 356-361), the stride calculation is correct for
+      ding A into LDS
+    • But in the main computation loop (lines 430-432, 445), the code still uses
+      or addressing instead of strideA
+    • Similar issues exist in wvSplitK_hf_ and wvSplitK_hf_big_
+  4. The utils.py has x.is_contiguous() check at line 181 that prevents padded t
+     ors from using the skinny kernel.
+
+  Let me first run the profiling and diagnosis steps as instructed, then impleme
+  nt the fix:
+• Used SetTodoList
+  • Run profiling to understand current kernel dispatch ←
+  • Diagnose padding issue with test case
+  • Fix kernel memory access patterns to use strideA
+  • Remove is_contiguous() guard from utils.py
+  • Rebuild vllm with changes
+  • Run test harness to verify fix
+•
+• Used Shell (cd /workspace/vllm && roc...onize() " 2>&1 | tail -40)
+• Let me fix the command syntax:
+• Used Shell (cd /workspace/vllm && cat...skinny.py 2>&1 | tail -50)
+•
+• Used Shell (cd /workspace/vllm && cat...n3.12 /tmp/test_skinny.py)
+• Good, the kernel runs. Now let me diagnose the padding issue:
+• Used Shell (cd /workspace/vllm && /us...bs().max().item()}") EOF )
+• This confirms the issue. The padded tensor has stride 4224 instead of 4096, an
+  d the kernel produces incorrect results (max error 382.0 instead of near 0).
+
+  Now let me analyze the kernel code more carefully. Looking at the code:
+
+  1. wvSplitK_hf_sml_ (lines 304-568):
+    • Line 310: accepts strideA parameter ✓
+    • Lines 356-361: Correctly uses strideA for loading A into LDS ✓
+    • Line 430-432: Uses K for B addressing: &B[(m + 0) * K + k_] and B_[y * K]
+      is is for weight matrix B, which should be contiguous
+    • Line 445: Uses K for LDS access: s[k_ + K * n] - This is correct since LDS
+      packed contiguously
+    • Lines 514, 561: Output write uses C[m + i + n * M] - This is correct for c
+      guous output
+  2. wvSplitK_hf_ (lines 584-891):
+    • Similar pattern - strideA used for initial LDS load
+    • Lines 734-736: Uses K for B addressing
+    • Lines 749-752: Uses K for LDS/memory access
+  3. wvSplitK_hf_big_ (lines 908-1269):
+    • Lines 1082-1084: Uses strideA correctly for LDS load
+    • Lines 1099-1101: Uses K for B addressing
+    • Lines 1117-1123: Uses strideA for memory fallback access ✓
+
+  The key issue is that the LDS is loaded correctly with stride, but then the ke
+  rnel assumes the LDS contains data laid out with stride K, not strideA. When l
+  oading from LDS, the code uses s[k_ + K * n] but the data was stored with stri
+  deA addressing.
+
+  Let me trace through more carefully:
+
+  In wvSplitK_hf_sml_:
+
+  • Lines 356-361 load A into LDS at position k_in using row * strideA + col add
+    ssing
+  • But k_in = k + ((threadIdx.y * THRDS + threadIdx.x) * A_CHUNK) is a linear i
+    ex
+  • The LDS is filled linearly with data from strided A
+
+  Then at line 445:
+
+  • bigA[n][k2] = *((const bigType*)(&(s[k_ + K * n])))
+  • This assumes LDS has layout where row n starts at offset K * n
+  • But LDS was filled linearly from strided data!
+
+  The problem is the mismatch between how data is loaded into LDS and how it's r
+  ead. The load uses 2D strided addressing but stores linearly, while the read a
+  ssumes a different linear layout.
+
+  Let me look more carefully at the loading code:
+
+  for (uint32_t k = 0; k < min__(K * N, max_lds_len); k += THRDS * WvPrGrp * A_C
+  HUNK) {
+      uint32_t k_in = k + ((threadIdx.y * THRDS + threadIdx.x) * A_CHUNK);
+      if (k_in >= min__(K * N, max_lds_len)) break;
+
+      // Compute 2D index for strided access: row = k_in / K, col = k_in % K
+      // Then global address = row * strideA + col
+      uint32_t row = k_in / K;
+      uint32_t col = k_in % K;
+      uint32_t global_idx = row * strideA + col;
+      *((bigType*)(&s[k_in])) = *((bigType*)(&A[global_idx]));
+  }
+
+  This loads A into LDS such that s[k_in] contains A[row * strideA + col] where
+  row = k_in / K and col = k_in % K.
+
+  So LDS position k_in corresponds to logical position (k_in / K, k_in % K) in t
+  he tensor. This means LDS has the same logical layout as if A were contiguous!
+
+  Then when reading at line 445:
+
+  bigA[n][k2] = *((const bigType*)(&(s[k_ + K * n])));
+
+  For n=0, this reads from s[k_] which is A[0 * strideA + k_%K] = A[k_%K] ✓ For
+  n=1, this reads from s[k_ + K] which is A[1 * strideA + k_%K] = A[strideA + k_
+  %K] ✓
+
+  Wait, this should be correct! Let me check the actual values more carefully...
+
+  Actually, looking at line 445 again: s[k_ + K * n]
+
+  • For n=0: s[k_] → row=0, col=k_%K → A[0*strideA + k_%K] ✓
+  • For n=1: s[k_ + K] → row=1, col=k_%K → A[1*strideA + k_%K] ✓
+
+  This looks correct. Let me check the B matrix access instead:
+
+  Line 430-432:
+
+  const scalar_t* B_ = &B[(m + 0) * K + k_];
+  for (int y = 0; y < YTILE; y++)
+      bigB[y][k2].h8 = (loadnt((scalar8*)(&B_[y * K])));
+
+  For y=0: B_[0] = B[m*K + k_] ✓ For y=1: B_[K] = B[(m*K + k_) + K] = B[(m+1)*K
+  + k_] ✓
+
+  This also looks correct for a contiguous B matrix.
+
+  Let me check the output write:
+
+  Line 514:
+
+  C[m + i + n * M] = __float2s<scalar_t>(sum[n][i]);
+
+  For n=0: C[m + i] ✓ For n=1: C[m + i + M] ✓
+
+  This assumes output C is contiguous with leading dimension M.
+
+  Hmm, let me re-examine. The issue might be in how the kernel is called or in t
+  he bounds checking. Let me look at the kernel dispatch more carefully and chec
+  k if there's an issue with the bounds.
+
+  Actually, wait - I see the problem now! Looking at line 430-432:
+
+  const scalar_t* B_ = &B[(m + 0) * K + k_];
+
+  This computes B[m * K + k_], but m is the output row index (0 to M-1), and B h
+  as shape (M, K). So B[m * K + k_] accesses row m, column k_ of B. This is corr
+  ect.
+
+  But wait, let me check the wvSplitK function signature and how it's called:
+
+  Looking at line 1296:
+
+  torch::Tensor wvSplitK(const at::Tensor& in_a, const at::Tensor& in_b, ...)
+
+  And line 1366-1367:
+
+  fptype* af4 = reinterpret_cast<fptype*>(in_a.data_ptr());
+  const fptype* bf4 = reinterpret_cast<const fptype*>(in_b.data_ptr());
+
+  So in_a is passed as A and in_b is passed as B.
+
+  Looking at the Python call in utils.py line 202:
+
+  out = ops.wvSplitK(weight, x_view, cu_count, bias)
+
+  So weight is in_a (which becomes A in kernel) and x_view is in_b (which become
+  s B in kernel).
+
+  But in the kernel, the computation is C = A @ B^T where:
+
+  • A (weight) has shape (M, K) = (4096, 4096)
+  • B (x_view) has shape (N, K) = (4, 4096)
+  • C has shape (N, M) = (4, 4096)
+
+  Wait, that doesn't match. Let me check the tensor shapes more carefully.
+
+  From utils.py:
+
+  • x has shape (..., K) where K is the last dimension
+  • weight has shape (M, K)
+  • Output should have shape (..., M)
+
+  In the kernel:
+
+  • Line 1299-1301: M_in = in_a.size(0), K_in = in_a.size(1), N_in = in_b.size(0
+  • Line 1318-1320: out_c has shape {N_in, M_in}
+
+  So if in_a = weight with shape (4096, 4096) and in_b = x_view with shape (4, 4
+  096):
+
+  • M_in = 4096, K_in = 4096, N_in = 4
+  • Output shape = (4, 4096)
+
+  But the kernel comment says "A[] fits LDS capacity" and A is the activation ma
+  trix. Let me check which tensor goes to LDS...
+
+  Looking at line 341-362, the kernel loads A into LDS. But A in the kernel is i
+  n_a which is weight!
+
+  So the kernel is loading weight into LDS, not activation. And the activation B
+  is read from memory.
+
+  Looking at line 430-432 again:
+
+  const scalar_t* B_ = &B[(m + 0) * K + k_];
+
+  Here B is the activation x_view with shape (N, K) = (4, 4096). So B[m * K + k_
+  ] would be accessing row m of B, but m goes from 0 to M-1 = 0 to 4095, while B
+  only has N=4 rows!
+
+  This is clearly wrong. There's a mismatch in how the kernel interprets the mat
+  rices.
+
+  Let me re-read the kernel more carefully. Looking at line 307:
+
+  wvSplitK_hf_sml_(const int K, const int M, const int Bx, const int By,
+                   const scalar_t* B, const scalar_t* __restrict__ A,
+                   ...
+
+  So the kernel signature has B first, then A. But in the dispatch at line 1334:
+
+  wvSplitK_hf_sml_<fptype, 64, _YTILE, 16, 8, _UNRL, _N>
+      <<<grid, block, 0, stream>>>(K_in, M_in, Bx_in, By_in, af4, bf4, ...
+
+  So af4 (which is in_a = weight) is passed as the 5th argument, which correspon
+  ds to B in the kernel signature! And bf4 (which is in_b = x_view) is passed as
+  the 6th argument, which corresponds to A in the kernel signature!
+
+  So in the kernel:
+
+  • B (5th param) = weight with shape (M, K) = (4096, 4096)
+  • A (6th param) = x_view with shape (N, K) = (4, 4096)
+
+  Now looking at line 356-361:
+
+  uint32_t row = k_in / K;
+  uint32_t col = k_in % K;
+  uint32_t global_idx = row * strideA + col;
+  *((bigType*)(&s[k_in])) = *((bigType*)(&A[global_idx]));
+
+  Here A is x_view with shape (N, K) = (4, 4096). So row = k_in / K goes from 0
+  to N-1 = 0 to 3, and col = k_in % K goes from 0 to K-1 = 0 to 4095.
+
+  For a contiguous tensor, strideA would be K = 4096. For a padded tensor, strid
+  eA would be > K, e.g., 4224.
+
+  So for padded x_view:
+
+  • s[0] = A[0 * 4224 + 0] = A[0] ✓
+  • s[1] = A[0 * 4224 + 1] = A[1] ✓
+  • ...
+  • s[4095] = A[0 * 4224 + 4095] = A[4095] ✓
+  • s[4096] = A[1 * 4224 + 0] = A[4224] but should be A[4096]! ✗
+
+  Ah, there's the bug! When loading into LDS, the code correctly uses strideA to
+  read from the padded tensor. But then when reading from LDS later, it assumes
+  a contiguous layout!
+
+  Looking at line 445:
+
+  bigA[n][k2] = *((const bigType*)(&(s[k_ + K * n])));
+
+  For n=1, k_=0: s[4096] is read, which contains A[4224] (the first element of r
+  ow 1 in padded storage), but the kernel expects it to contain A[4096] (the fir
+  st element of row 1 in logical layout).
+
+  The fix is to ensure that when data is loaded into LDS, it's packed contiguous
+  ly regardless of the input stride. The current code loads with stride but stor
+  es linearly, which creates a mismatch.
+
+  Actually wait, let me re-read the loading code again:
+
+  for (uint32_t k = 0; k < min__(K * N, max_lds_len); k += THRDS * WvPrGrp * A_C
+  HUNK) {
+      uint32_t k_in = k + ((threadIdx.y * THRDS + threadIdx.x) * A_CHUNK);
+      if (k_in >= min__(K * N, max_lds_len)) break;
+
+      uint32_t row = k_in / K;
+      uint32_t col = k_in % K;
+      uint32_t global_idx = row * strideA + col;
+      *((bigType*)(&s[k_in])) = *((bigType*)(&A[global_idx]));
+  }
+
+  This loads A[row * strideA + col] into s[k_in] where k_in = row * K + col.
+
+  So:
+
+  • s[0] = A[0 * strideA + 0] = A[0]
+  • s[4095] = A[0 * strideA + 4095] = A[4095]
+  • s[4096] = A[1 * strideA + 0] = A[strideA] = A[4224] for padded
+
+  But the kernel expects s[4096] to contain A[4096] (the logical element at row
+  1, col 0).
+
+  The issue is that the loading code treats k_in as a linear index into both LDS
+  and the logical tensor, but then uses strideA to compute the actual memory add
+  ress. This means LDS contains strided data, not packed data!
+
+  The fix should be to pack the data contiguously into LDS. Let me think about t
+  his...
+
+  Actually, I think the current code is trying to do the right thing but there's
+  a subtle bug. The LDS is being used as a cache where position k_in corresponds
+  to logical position (row, col) = (k_in / K, k_in % K). When reading from a pad
+  ded tensor, we need to use strideA to find the actual memory location.
+
+  But then when reading from LDS later, we should use the same logical indexing.
+  Let me check line 445 again:
+
+  bigA[n][k2] = *((const bigType*)(&(s[k_ + K * n])));
+
+  For n=0: reads s[k_] which is logical position (k_/K, k_%K) = (0, k_) since k_
+  < K. For n=1: reads s[k_ + K] which is logical position ((k_+K)/K, (k_+K)%K) =
+  (1, k_).
+
+  So the LDS read is correct for logical indexing!
+
+  The problem must be elsewhere. Let me check the bounds...
+
+  Oh wait, I see it now! Look at line 350:
+
+  for (uint32_t k = 0; k < min__(K * N, max_lds_len); k += THRDS * WvPrGrp * A_C
+  HUNK) {
+
+  The loop iterates up to min__(K * N, max_lds_len). For our case with K=4096, N
+  =4: K*N = 16384.
+
+  But max_lds_len = LDS_SIZE / 2 = 64*1024/2 = 32768 (or 80*1024 for gfx950).
+
+  So the loop should cover all 16384 elements. But let me check if there's a bou
+  nds issue...
+
+  Actually, I realize the issue might be in how strideA is computed. Let me chec
+  k line 1311:
+
+  auto strideA_in = in_a.stride(0);
+
+  This gets the stride of dimension 0 (the row stride). For a tensor with shape
+  (N, K) = (4, 4096):
+
+  • Contiguous: stride(0) = K = 4096, stride(1) = 1
+  • Padded: stride(0) = 4224, stride(1) = 1
+
+  So strideA_in = 4224 for padded. This is correct.
+
+  Hmm, let me trace through more carefully with actual numbers.
+
+  For padded tensor A with shape (4, 4096) and stride (4224, 1):
+
+  • Logical element A[0, 0] is at memory offset 0
+  • Logical element A[0, 4095] is at memory offset 4095
+  • Logical element A[1, 0] is at memory offset 4224 (not 4096!)
+  • Logical element A[1, 1] is at memory offset 4225
+
+  The loading code:
+
+  uint32_t k_in = 4096;  // Example: second row, first column
+  uint32_t row = 4096 / 4096 = 1;
+  uint32_t col = 4096 % 4096 = 0;
+  uint32_t global_idx = 1 * 4224 + 0 = 4224;
+  s[4096] = A[4224];  // This is A[1, 0] in logical terms ✓
+
+  So s[4096] correctly contains the logical element A[1, 0].
+
+  Then the reading code:
+
+  bigA[1][k2] = s[k_ + 4096 * 1];  // For n=1
+
+  If k_=0, this reads s[4096] which is A[1, 0]. This is correct!
+
+  So the LDS loading and reading should be correct. Let me check if there's an i
+  ssue elsewhere...
+
+  Oh! I think I found it. Look at line 430-432:
+
+  const scalar_t* B_ = &B[(m + 0) * K + k_];
+  for (int y = 0; y < YTILE; y++)
+      bigB[y][k2].h8 = (loadnt((scalar8*)(&B_[y * K])));
+
+  Here B is the weight matrix with shape (M, K) = (4096, 4096). The code accesse
+  s B[m * K + k_] and then B_[y * K] = B[(m + y) * K + k_].
+
+  But wait, the weight matrix B should be contiguous! The issue is with the acti
+  vation tensor A (which is in_b in the dispatch, but called A in the kernel).
+
+  Let me check if there's any other place where stride is used incorrectly...
+
+  Actually, I just realized something. Let me check the output write bounds. Loo
+  king at line 503-516:
+
+  if (threadIdx.x == 63) {
+      for (int n = 0; n < N; n++) {
+          for (int i = 0; i < YTILE; i++) {
+              ...
+              C[m + i + n * M] = __float2s<scalar_t>(sum[n][i]);
+          }
+      }
+  }
+
+  The output C has shape (N, M) = (4, 4096). The write C[m + i + n * M] for n=0
+  writes to C[m+i], and for n=1 writes to C[m+i+M].
+
+  For m=0, i=0, n=0: C[0] ✓ For m=0, i=0, n=1: C[4096] ✓ For m=0, i=0, n=3: C[12
+  288] ✓
+
+  This assumes C is contiguous with shape (N, M). Let me check the output alloca
+  tion at line 1318-1320:
+
+  auto out_c = torch::empty(
+      {N_in, M_in},
+      torch::TensorOptions().dtype(in_b.dtype()).device(in_b.device()));
+
+  Yes, output is (N_in, M_in) = (4, 4096) and should be contiguous.
+
+  OK so the output is fine. Let me think about what else could be wrong...
+
+  Actually, wait. Let me re-check the kernel type. In wvSplitK_hf_sml_, the comm
+  ent says "This version targets cases where A[] fits LDS capacity".
+
+  Looking at the condition at line 1332-1336:
+
+  if ((K_in * N_in <= max_lds_len) && (M_in % _YTILE == 0))
+      wvSplitK_hf_sml_<fptype, 64, _YTILE, 16, 8, _UNRL, _N>
+
+  For our case: K_in * N_in = 4096 * 4 = 16384, and max_lds_len = 32768 (for non
+  -gfx950) or 81920 (for gfx950). So 16384 <= 32768 is true, and this kernel sho
+  uld be selected.
+
+  Now, in this kernel, A (the activation) is loaded into LDS. But looking at the
+  code again, I notice something at line 350-362:
+
+  for (uint32_t k = 0; k < min__(K * N, max_lds_len); k += THRDS * WvPrGrp * A_C
+  HUNK) {
+      uint32_t k_in = k + ((threadIdx.y * THRDS + threadIdx.x) * A_CHUNK);
+
+      if (k_in >= min__(K * N, max_lds_len)) break;
+
+      uint32_t row = k_in / K;
+      uint32_t col = k_in % K;
+      uint32_t global_idx = row * strideA + col;
+      *((bigType*)(&s[k_in])) = *((bigType*)(&A[global_idx]));
+  }
+
+  The loop condition uses min__(K * N, max_lds_len). But inside the loop, the br
+  eak condition also checks k_in >= min__(K * N, max_lds_len).
+
+  For our case with K=4096, N=4: K*N = 16384. The loop increments by THRDS * WvP
+  rGrp * A_CHUNK = 64 * 16 * 8 = 8192.
+
+  So the iterations are:
+
+  • k=0: k_in ranges from 0 to 511 (for threadIdx.y=0, threadIdx.x=0..63, A_CHUN
+  8) Actually, k_in = 0 + (threadIdx.y * 64 + threadIdx.x) * 8 For threadIdx.y=0
+    ..15, threadIdx.x=0..63: k_in ranges from 0 to (15*64+63)8 = 9998 = 7992
+
+  Wait, that's not right. Let me recalculate:
+
+  • k_in = k + (threadIdx.y * THRDS + threadIdx.x) * A_CHUNK
+  • For k=0, threadIdx.y=0..15, threadIdx.x=0..63, A_CHUNK=8:
+    • Min k_in = 0 + (0*64 + 0)*8 = 0
+    • Max k_in = 0 + (15*64 + 63)*8 = (960+63)8 = 10238 = 8184
+
+  So in the first iteration (k=0), k_in ranges from 0 to 8184. In the second ite
+  ration (k=8192), k_in ranges from 8192 to 8192+8184 = 16376.
+
+  Both iterations are within K*N = 16384, so all elements should be loaded.
+
+  Hmm, but wait. There's a potential issue with the break condition. The break i
+  s inside the loop body, but different threads have different k_in values. Some
+  threads might break early while others continue.
+
+  Actually, looking more carefully, the break condition if (k_in >= min__(K * N,
+  max_lds_len)) break; is per-thread. So threads with k_in >= 16384 will break,
+  which is correct.
+
+  Let me think about this differently. Maybe the issue is not in wvSplitK_hf_sml
+  _ but in how the kernel is dispatched or in another kernel variant.
+
+  Let me check which kernel is actually being used. Looking at the dispatch cond
+  itions at lines 1332-1346:
+
+  if ((K_in * N_in <= max_lds_len) && (M_in % _YTILE == 0))
+      wvSplitK_hf_sml_...
+  else if (K_in * N_in <= max_lds_len * 1.2)
+      wvSplitK_hf_...
+  else
+      wvSplitK_hf_big_...
+
+  For our case:
+
+  • K_in * N_in = 4096 * 4 = 16384
+  • max_lds_len = 64*1024/2 = 32768 (assuming non-gfx950)
+  • M_in = 4096, _YTILE depends on the macro expansion
+
+  Let me check what _YTILE is. Looking at the WVSPLITK macro at line 1328-1347,
+  it's called with different _YTILE values (1, 2, 3, 4) depending on the conditi
+  ons in WVSPLIT_TILE.
+
+  For M_in = 4096 and CuCount (say 16), sYT = (4096 + 164 - 1) / (164) = 4159 /
+  64 = 64. Then WVSPLIT_TILE(64, N) with N=4 would go to line 1358-1361:
+
+  else if (__N == 4)
+      WVSPLITK(4, 1, __N)
+
+  So _YTILE = 4. And M_in % 4 = 4096 % 4 = 0, so the first condition is satisfie
+  d.
+
+  Thus wvSplitK_hf_sml_ with _YTILE=4 should be used.
+
+  OK so we're in the right kernel. Let me look more carefully at the actual memo
+  ry access patterns...
+
+  Actually, I just realized something. Let me check line 430-432 again:
+
+  const scalar_t* B_ = &B[(m + 0) * K + k_];
+  for (int y = 0; y < YTILE; y++)
+      bigB[y][k2].h8 = (loadnt((scalar8*)(&B_[y * K])));
+
+  Here B is the weight matrix with shape (M, K). The access B[(m + y) * K + k_]
+  assumes B is stored in row-major format with row stride K.
+
+  But what if the weight matrix is also padded? The code doesn't handle that cas
+  e!
+
+  However, in typical usage, the weight matrix should be contiguous. The issue i
+  s with the activation tensor which can be padded due to model architecture.
+
+  Let me look at the actual test case again. The padded tensor is A_padded which
+  is the activation (input x), not the weight. So the weight B should be contigu
+  ous.
+
+  Wait, I think I need to re-examine which tensor is which. Let me trace through
+  the Python call:
+
+  out = ops.wvSplitK(B, A_padded.reshape(-1, A_padded.size(-1)), num_compute_uni
+  ts())
+
+  Here:
+
+  • First arg (in_a) = B = weight with shape (4096, 4096)
+  • Second arg (in_b) = A_padded.reshape(...) with shape (4, 4096)
+
+  In the kernel dispatch (line 1366-1367):
+
+  fptype* af4 = reinterpret_cast<fptype*>(in_a.data_ptr());  // weight
+  const fptype* bf4 = reinterpret_cast<const fptype*>(in_b.data_ptr());  // acti
+  vation
+
+  Then at line 1334-1336:
+
+  wvSplitK_hf_sml_<fptype, 64, _YTILE, 16, 8, _UNRL, _N>
+      <<<grid, block, 0, stream>>>(K_in, M_in, Bx_in, By_in, af4, bf4, ...
+
+  So af4 (weight) is passed as the 5th arg, and bf4 (activation) as the 6th arg.
+
+  In the kernel signature (line 307-310):
+
+  wvSplitK_hf_sml_(const int K, const int M, const int Bx, const int By,
+                   const scalar_t* B, const scalar_t* __restrict__ A,
+                   ...
+
+  So:
+
+  • Kernel's B = af4 = weight
+  • Kernel's A = bf4 = activation
+
+  Now, the stride is computed at line 1311:
+
+  auto strideA_in = in_a.stride(0);
+
+  This is the stride of in_a which is the weight, not the activation!
+
+  So strideA is the weight stride, not the activation stride. But the activation
+  is the one that's padded!
+
+  This is the bug! The code computes strideA from the wrong tensor. It should co
+  mpute the stride of in_b (the activation), not in_a (the weight).
+
+  Let me verify this by checking what the kernel does with strideA. Looking at l
+  ine 356-361:
+
+  uint32_t row = k_in / K;
+  uint32_t col = k_in % K;
+  uint32_t global_idx = row * strideA + col;
+  *((bigType*)(&s[k_in])) = *((bigType*)(&A[global_idx]));
+
+  Here A is the activation (bf4 = in_b). So the code is using strideA (which is
+  the weight stride) to access the activation tensor!
+
+  The fix should be to compute strideA from in_b instead of in_a:
+
+  auto strideA_in = in_b.stride(0);  // Changed from in_a to in_b
+
+  But wait, there's another issue. The kernel parameter is named strideA, and in
+  the kernel, A refers to the activation. So the naming is consistent within the
+  kernel, but the dispatch code has it backwards!
+
+  Let me also check if there are similar issues in other kernel variants and in
+  the wvSplitKrc function.
+
+  Looking at wvSplitKrc at line 1794-1886, I don't see any stride parameter bein
+  g passed. Let me check if wvSplitKrc handles padded tensors...
+
+  Actually, looking at the utils.py code at line 171-187:
+
+  use_skinny_reduce_counting = (
+      envs.VLLM_ROCM_USE_SKINNY_GEMM
+      and on_gfx950()
+      and x.dtype in [torch.float16, torch.bfloat16]
+      and (
+          10 <= n <= 128
+          and k % 8 == 0
+          and k > 512
+          and m % 16 == 0
+          and fits_wvsplitkrc
+          and x.is_contiguous()  # <-- This check!
+      )
+  )
+
+  There's an x.is_contiguous() check for wvSplitKrc too!
+
+  And at line 189-203:
+
+  use_skinny = (
+      envs.VLLM_ROCM_USE_SKINNY_GEMM
+      and on_gfx9()
+      and x.dtype in [torch.float16, torch.bfloat16]
+      and k % 8 == 0
+  )
+
+  if use_skinny is not True:
+      return torch.nn.functional.linear(x, weight, bias)
+
+  x_view = x.reshape(-1, x.size(-1))
+  if m > 8 and 0 < n <= 4:
+      cu_count = num_compute_units()
+      out = ops.wvSplitK(weight, x_view, cu_count, bias)
+
+  The use_skinny path (which calls wvSplitK) doesn't have the is_contiguous() ch
+  eck! So padded tensors should reach wvSplitK, but they get wrong results due t
+  o the stride bug.
+
+  Let me now implement the fix:
+
+  1. Fix the stride computation in wvSplitK to use in_b.stride(0) instead of in_
+     tride(0)
+  2. Check if wvSplitKrc also needs a similar fix
+  3. Remove the is_contiguous() checks from utils.py
+
+  Let me also check wvSplitKrc to see if it has similar issues:
+• Used ReadFile (vllm/csrc/rocm/skinny_gemms.cu)
+• I see that wvSplitKrc doesn't have any stride handling at all - it doesn't com
+  pute or pass a stride parameter. Looking at the kernel signature at line 1408-
+  1412:
+
+  wvSplitKrc_(const int actlN, const int K, const int M, const int Bx,
+              const int By, const scalar_t* __restrict__ B,
+              const scalar_t* __restrict__ A,
+              const scalar_t* __restrict__ BIAS, float* glbl, scalar_t* C,
+              const int CuCount) {
+
+  There's no strideA parameter. So wvSplitKrc doesn't support padded tensors at
+  all. We'll need to add that support too.
+
+  But first, let me focus on fixing wvSplitK since that's the kernel being used
+  for our test case (N=4 <= 4).
+
+  Now let me implement the fix:
+• Used SetTodoList
+  • Run profiling to understand current kernel dispatch
+  • Diagnose padding issue with test case
+  • Fix kernel memory access patterns to use strideA ←
+  • Remove is_contiguous() guard from utils.py
+  • Rebuild vllm with changes
+  • Run test harness to verify fix
+• Now let me fix the stride computation bug in wvSplitK. The issue is at line 13
+  11 where it computes stride from in_a (weight) instead of in_b (activation):
+• Used StrReplaceFile (vllm/csrc/rocm/skinny_gemms.cu)
+• Now I need to also add stride support to wvSplitKrc. Let me first check the ke
+  rnel implementation to understand how it accesses the activation tensor:
+• Used ReadFile (vllm/csrc/rocm/skinny_gemms.cu)
+• This kernel is more complex. Let me look for where it accesses the activation
+  tensor A:
+• Used ReadFile (vllm/csrc/rocm/skinny_gemms.cu)
+• I see the issue in wvSplitKrc_. At line 1607-1611:
+
+  __builtin_amdgcn_global_load_lds(
+      (int*)(&A[min__(
+          K * actlN - A_CHUNK,
+          kOffcp + K * (n / CHUNKK +
+                        (N / CHUNKK) * (threadIdx.x / (64 / CHUNKK)) +
+                        (threadIdx.y % sprdN)))]),
+
+  This accesses A[kOffcp + K * (...)], assuming A has row stride K. For a padded
+  tensor, this should use strideA instead.
+
+  The wvSplitKrc kernel is more complex and would require more extensive changes
+  . For now, let me focus on:
+
+  1. Making sure the basic wvSplitK fix works
+  2. Adding the is_contiguous() check removal for the wvSplitK path (not wvSplit
+     )
+
+  Actually, looking at the utils.py code again:
+
+  use_skinny_reduce_counting = (
+      ...
+      and x.is_contiguous()  # line 181
+  )
+  if use_skinny_reduce_counting:
+      ...
+      out = ops.wvSplitKrc(weight, x_view, cu_count, bias)
+
+  use_skinny = (
+      ...
+      # No is_contiguous() check here!
+  )
+  ...
+  if m > 8 and 0 < n <= 4:
+      cu_count = num_compute_units()
+      out = ops.wvSplitK(weight, x_view, cu_count, bias)
+
+  The wvSplitKrc path (for gfx950) has the is_contiguous() check, but the wvSpli
+  tK path (for gfx9) doesn't. So for our test case on gfx950, we might be hittin
+  g the wvSplitKrc path which doesn't support strides at all.
+
+  Let me check what GPU we're on and which path is being taken:
+• Used Shell (/usr/bin/python3.12 -c " ...a.get_device_name(0)}') ")
+• We're on gfx950, so both conditions are true. Let me check which kernel is act
+  ually being used by looking at the conditions more carefully:
+• Used Shell (/usr/bin/python3.12 << 'E...y_reduce_counting}") EOF )
+• Interesting! GrpsShrB = min(4 // 16, 4) = min(0, 4) = 0, which makes CuNeeded
+  = 0. This seems like a bug in the condition calculation, but since 10 <= n <=
+  128 is 10 <= 4 <= 128 which is False, the use_skinny_reduce_counting path is n
+  ot taken anyway.
+
+  So for n=4, we go to the use_skinny path which calls wvSplitK. Good, so my fix
+  to wvSplitK should be the one that matters.
+
+  Now let me also check if there are any issues with the wvSplitK_hf_ and wvSpli
+  tK_hf_big_ kernels. Looking back at my analysis, I saw that these kernels also
+  have the same pattern of using strideA for LDS loading but then accessing with
+  K offset. Let me verify this is consistent...
+
+  Actually, looking at the code again, I realize the LDS loading and access patt
+  ern should be consistent within each kernel. The issue I identified was that s
+  trideA was being computed from the wrong tensor (in_a instead of in_b).
+
+  Let me now also check if there are similar issues in wvSplitK_hf_ and wvSplitK
+  _hf_big_. Looking at lines 656-668 for wvSplitK_hf_:
+
+  for (uint32_t k = 0; k < min__(K * N, max_lds_len);
+       k += THRDS * WvPrGrp * A_CHUNK) {
+      uint32_t k_in = k + ((threadIdx.y * THRDS + threadIdx.x) * A_CHUNK);
+
+      if (k_in >= min__(K * N, max_lds_len)) break;
+
+      // Compute 2D index for strided access: row = k_in / K, col = k_in % K
+      // Then global address = row * strideA + col
+      uint32_t row = k_in / K;
+      uint32_t col = k_in % K;
+      uint32_t global_idx = row * strideA + col;
+      *((bigType*)(&s[k_in])) = *((bigType*)(&A[global_idx]));
+  }
+
+  This is the same pattern as wvSplitK_hf_sml_. And at line 749-752:
+
+  for (int n = 0; n < N; n++) {
+      if (k_ + K * n < max_lds_len)
+          bigA[n][k2] = *((const bigType*)(&(s[k_ + K * n])));
+      else
+          bigA[n][k2] = *((const bigType*)(&(A[k_ + K * n])));
+  }
+
+  Wait, there's an issue here! At line 752, when accessing A from memory (not LD
+  S), it uses A[k_ + K * n] which doesn't use strideA! This is a bug.
+
+  Similarly, in wvSplitK_hf_big_, at lines 1117-1124:
+
+  for (int n = 0; n < N; n++) {
+  #ifdef PCML
+      bigA[n][k2] = *((const bigType*)(&(s[k_ - kBase + kFit * n])));
+  #else
+      if (k_ + K * n < 32 * 1024)
+          bigA[n][k2] = *((const bigType*)(&(s[k_ + K * n])));
+      else {
+          // Compute 2D index for strided access: row = n, col = k_
+          // Then global address = row * strideA + col
+          uint32_t global_idx = n * strideA + k_;
+          bigA[n][k2] = *((const bigType*)(&(A[global_idx])));
+      }
+  #endif
+  }
+
+  Here the memory fallback at line 1122-1123 does use strideA correctly! But the
+  LDS access at line 1118 uses s[k_ + K * n].
+
+  The key insight is:
+
+  • LDS is loaded with strided data packed into linear LDS addresses
+  • LDS is read assuming linear layout where row n starts at offset K * n
+  • This is correct because the loading code stores A[row * strideA + col] into
+    row * K + col]
+
+  So the LDS access pattern is correct. The issue was just that strideA was comp
+  uted from the wrong tensor.
+
+  But wait, there's still the issue at line 752 in wvSplitK_hf_ where it accesse
+  s A[k_ + K * n] directly from memory without using strideA. This is the "fallb
+  ack" path when data doesn't fit in LDS. Let me check when this path is taken:
+
+  The condition is if (k_ + K * n < max_lds_len). For wvSplitK_hf_, this kernel
+  is used when K * N > max_lds_len but K * N <= max_lds_len * 1.2. So some data
+  might not fit in LDS.
+
+  Actually, looking more carefully at line 749-752:
+
+  for (int n = 0; n < N; n++) {
+      if (k_ + K * n < max_lds_len)
+          bigA[n][k2] = *((const bigType*)(&(s[k_ + K * n])));
+      else
+          bigA[n][k2] = *((const bigType*)(&(A[k_ + K * n])));
+  }
+
+  This is accessing element (n, k_) of the activation tensor. For LDS, it reads
+  from s[k_ + K * n]. For memory fallback, it reads from A[k_ + K * n].
+
+  But the memory fallback should use strideA: A[n * strideA + k_] instead of A[k
+  _ + K * n].
+
+  Let me fix this bug in wvSplitK_hf_:
+• Used StrReplaceFile (vllm/csrc/rocm/skinny_gemms.cu)
+• Now let me also check wvSplitK_hf_big_ for similar issues. Looking at lines 11
+  13-1126, I see it already handles the memory fallback correctly with strideA.
+  But let me double-check the LDS access is correct...
+
+  Actually, in wvSplitK_hf_big_, the LDS loading happens differently. Looking at
+  lines 1072-1087:
+
+  if ((k1 == 0) || (k1 == kBase + kFit)) {  // load next chunk of A[] to LDS
+      if (k1 != 0) kBase += kFit;
+      __syncthreads();
+      for (uint32_t k = 0; k < kFit; k += THRDS * _WvPrGrp * A_CHUNK) {
+          uint32_t kOff = k + ((threadIdx.y * THRDS + threadIdx.x) * A_CHUNK);
+          if (kBase + kOff >= K) break;
+          if (kOff >= kFit) break;
+          for (uint32_t n = 0; n < N; n++) {
+              // Compute 2D index for strided access: row = n, col = kBase + kOf
+  f
+              // Then global address = row * strideA + col
+              uint32_t k_in = n * strideA + kBase + kOff;
+              uint32_t k_ot = n * kFit + kOff;
+              *((bigType*)(&s[k_ot])) = *((bigType*)(&A[k_in]));
+          }
+      }
+      __syncthreads();
+  }
+
+  Here, A[n * strideA + kBase + kOff] is loaded into s[n * kFit + kOff]. So LDS
+  position n * kFit + kOff contains logical element (n, kBase + kOff).
+
+  Then at line 1115:
+
+  bigA[n][k2] = *((const bigType*)(&(s[k_ - kBase + kFit * n])));
+
+  This reads from s[k_ - kBase + kFit * n] = s[n * kFit + (k_ - kBase)], which c
+  orresponds to logical element (n, k_). This is correct!
+
+  And the memory fallback at lines 1121-1123:
+
+  uint32_t global_idx = n * strideA + k_;
+  bigA[n][k2] = *((const bigType*)(&(A[global_idx])));
+
+  This is also correct!
+
+  So wvSplitK_hf_big_ seems to handle strides correctly. The only issue was the
+  strideA being computed from the wrong tensor in the dispatch function.
+
+  Now let me also check wvSplitK_hf_sml_ for any memory fallback paths... Lookin
+  g at lines 436-447:
+
+  // Fetch activation matrix from either just LDS or from both LDS / memory
+  #pragma unroll
+  for (uint32_t k2 = 0; k2 < UNRL; k2++) {
+      uint32_t k = k1 + k2 * THRDS * A_CHUNK;
+      uint32_t k_ = k + threadIdx.x * A_CHUNK;
+      if (k_ >= K) break;
+
+      // Fetch A activation matrix in interleaved fashion from LDS or memory
+
+      for (int n = 0; n < N; n++) {
+          bigA[n][k2] = *((const bigType*)(&(s[k_ + K * n])));
+      }
+  }
+
+  This kernel only reads from LDS, no memory fallback. The LDS loading at lines
+  350-362 uses strideA correctly, and the reading at line 445 uses s[k_ + K * n]
+  which is correct for the packed LDS layout.
+
+  So the fixes I've made so far are:
+
+  1. Fixed strideA computation in wvSplitK to use in_b.stride(0) instead of in_a
+     ride(0)
+  2. Fixed memory fallback in wvSplitK_hf_ to use strideA
+
+  Now I need to also fix wvSplitKrc for gfx950. But that's more complex. Let me
+  first test if the current fixes work for our test case.
+
+  Actually, wait. Let me re-check which kernel variant is being used. Looking at
+  the dispatch conditions at lines 1332-1346:
+
+  if ((K_in * N_in <= max_lds_len) && (M_in % _YTILE == 0))
+      wvSplitK_hf_sml_...
+  else if (K_in * N_in <= max_lds_len * 1.2)
+      wvSplitK_hf_...
+  else
+      wvSplitK_hf_big_...
+
+  For our case: K_in * N_in = 4096 * 4 = 16384. max_lds_len = get_lds_size() / 2
+  .
+
+  Let me check what get_lds_size() returns for gfx950:
+• Used Shell (/usr/bin/python3.12 -c " ...f_sml_ should be used') ")
+• So wvSplitK_hf_sml_ should be used, which only reads from LDS (no memory fallb
+  ack). The fix to strideA computation should be sufficient for this kernel.
+
+  Now let me rebuild and test:
+• Used SetTodoList
+  • Run profiling to understand current kernel dispatch
+  • Diagnose padding issue with test case
+  • Fix kernel memory access patterns to use strideA
+  • Remove is_contiguous() guard from utils.py ←
+  • Rebuild vllm with changes
+  • Run test harness to verify fix
+• Now let me remove the is_contiguous() guard from utils.py. Looking at the code
+  , there are two places:
+
+  1. Line 181: use_skinny_reduce_counting path (wvSplitKrc) - this needs stride
+     port in the kernel first
+  2. The use_skinny path (wvSplitK) - this should work with our fix
+
+  Let me first remove the check for the use_skinny path:
+• Used ReadFile (vllm/vllm/model_executor/layers/utils.py)
+• I see that the use_skinny path (lines 189-207) doesn't have an is_contiguous()
+  check, but the use_skinny_reduce_counting path (lines 171-187) does at line 18
+  1.
+
+  Since we're on gfx950 and our test case has n=4 (not in range 10-128), we won'
+  t hit the use_skinny_reduce_counting path. The use_skinny path will be used, a
+  nd it calls wvSplitK which we've fixed.
+
+  However, for completeness and to support padded tensors in all cases, I should
+  :
+
+  1. Remove the is_contiguous() check from use_skinny_reduce_counting
+  2. Add stride support to wvSplitKrc
+
+  But adding stride support to wvSplitKrc is complex. Let me first test if our c
+  urrent fix works, then we can address wvSplitKrc if needed.
+
+  Actually, let me also check if LLMM1 needs stride support. Looking at line 204
+  -206:
+
+  elif m % 4 == 0 and n == 1 and k <= 8192 and bias is None:
+      out = ops.LLMM1(weight, x_view, 4)
+
+  Let me check the LLMM1 implementation:
+• Used ReadFile (vllm/csrc/rocm/skinny_gemms.cu)
+• Looking at LLMM1, it doesn't handle strides at all - it just passes raw pointe
+  rs to the kernel. The LLGemm1_kernel at line 144-232 accesses memory with simp
+  le indexing like af4[row_addr + threadid + K / 8 * i] which assumes contiguous
+  layout.
+
+  So LLMM1 would also need fixes for padded tensor support. But since our test c
+  ase has n=4 (not n=1), we won't hit this path.
+
+  For now, let me focus on:
+
+  1. Removing the is_contiguous() check from use_skinny_reduce_counting (even th
+     h wvSplitKrc doesn't support strides yet, we can add that later)
+  2. Rebuilding and testing
+
+  Actually, I should be more careful here. If I remove the is_contiguous() check
+  from use_skinny_reduce_counting without fixing wvSplitKrc, padded tensors will
+  get wrong results. Let me first just test the wvSplitK fix, then we can addres
+  s wvSplitKrc separately.
+
+  Let me rebuild and test:
+• Used SetTodoList
+  • Run profiling to understand current kernel dispatch
+  • Diagnose padding issue with test case
+  • Fix kernel memory access patterns to use strideA
+  • Remove is_contiguous() guard from utils.py
+  • Rebuild vllm with changes ←
+  • Run test harness to verify fix
+•
+• Used Shell (cd /workspace/vllm && VLL...solation 2>&1 | tail -100)
+  Invalid arguments
+•
+• Used Shell (cd /workspace/vllm && VLL...solation 2>&1 | tail -100)
+  Killed by timeout (300s)
+• The build is taking longer than 300 seconds. Let me try a different approach -
+  just build the specific extension:
+• Used Shell (cd /workspace/vllm && VLL...ation -v 2>&1 | head -200)
+• The build is still in progress. Let me wait for it to complete. The build outp
+  ut shows it's downloading/checking dependencies. Let me continue the build in
+  the background and check if it completes:
+• Used Shell (cd /workspace/vllm && VLL.../tmp/build.log | tail -20)
+  Killed by timeout (300s)
+• The build is taking too long. Let me check if there's a way to just compile th
+  e specific CUDA file:
+• Used Shell (tail -50 /tmp/build.log 2...| echo "No build log yet")
+• The build is still running. It's in the "Building editable for vllm" phase whi
+  ch involves compiling the CUDA extensions. This can take 10-30 minutes as ment
+  ioned in the task description. Let me continue waiting:
+• Used Shell (cd /workspace/vllm && VLL...isolation 2>&1 | tail -30)
+  Killed by timeout (300s)
+• The build is still ongoing. Let me check the build log to see the progress:
+• Used Shell (tail -100 /tmp/build.log ...g|nvcc|hipcc)" | head -30)
+• The build is still in progress. Since this is expected to take 10-30 minutes,
+  let me try a longer timeout and run it in the background:
+• Used Shell (cd /workspace/vllm && noh...l -20 /tmp/build_full.log)
+•
+• Used Shell (cd /workspace/vllm && exp...l -30 /tmp/build_full.log)
+  Killed by timeout (30s)
+• The build has started. Let me wait for it to complete by checking periodically
+  :
+• Used Shell (sleep 120 && tail -50 /tm...hed|Complete)" | head -10)
+•
+• Used Shell (tail -100 /tmp/build_full...og 2>/dev/null | tail -30)
+• The build is still running. Let me wait longer and check again:
+• Used Shell (sleep 180 && tail -50 /tm...uild_full.log 2>/dev/null)
+• The build is still running. Let me wait a bit more and check for completion:
+• Used Shell (sleep 240 && tail -100 /t...og 2>/dev/null | tail -50)
+• The build is still in progress. This is expected for a full ROCm build. Let me
+  continue waiting:
+• Used Shell (sleep 300 && tail -100 /t...og 2>/dev/null | tail -50)
+  Invalid arguments
+•
+• Used Shell (sleep 300 && tail -100 /t...og 2>/dev/null | tail -50)
+  Killed by timeout (300s)
+•
+• Used Shell (tail -100 /tmp/build_full...og 2>/dev/null | tail -50)
+• The build is still running. This is a full ROCm build which can take 20-30 min
+  utes. Let me check if the build process is still active and wait more:
+• Used Shell (ps aux | grep -E "(pip|py... | grep -v grep | head -5)
+• Good, the build is still running (PID 17590 and 17694). Let me wait longer and
+  check for completion:
+• Used Shell (sleep 300 && tail -100 /t...build_full.log | tail -60)
+  Killed by timeout (300s)
+•
+• Used Shell (tail -100 /tmp/build_full.log | tail -60)
+• The build completed successfully! Now let me test if the fix works:
+• Used SetTodoList
+  • Run profiling to understand current kernel dispatch
+  • Diagnose padding issue with test case
+  • Fix kernel memory access patterns to use strideA
+  • Remove is_contiguous() guard from utils.py
+  • Rebuild vllm with changes
+  • Run test harness to verify fix ←
+•
+• Used Shell (cd /workspace/vllm && /us...else "Test FAILED!") EOF )
+• The error went down from 382.0 to 0.015625, which is a huge improvement! But i
+  t's still not quite zero. This small error might be due to floating point prec
+  ision differences in the computation order. Let me check if this is within acc
+  eptable tolerance:
+• Used Shell (cd /workspace/vllm && /us...bs().max().item()}") EOF )
+• Interesting! The contiguous test also has the same error (0.0625), which means
+  this is the baseline precision of the kernel, not a bug in our stride handling
+  . The error is consistent between padded and contiguous cases, which confirms
+  our fix is working correctly!
+
+  The small error is due to floating-point arithmetic ordering differences in th
+  e optimized kernel vs. the reference implementation. This is normal for GPU ke
+  rnels.
+
+  Now let me run the test harness to verify:
+• Used Shell (cd /workspace/vllm && /us...pace/test_harness.py 2>&1)
+• Good progress! We're at 74.0 points. The issue is that the tests are failing w
+  hen pad_b=True (padded weight matrix). Our fix only handles padded activation
+  tensors (pad_a=True), not padded weight tensors.
+
+  Looking at the failures:
+
+  • pad_a=True, pad_b=False: PASS - padded activation works!
+  • pad_a=False, pad_b=True: FAIL - padded weight doesn't work
+  • pad_a=True, pad_b=True: FAIL - both padded doesn't work
+
+  The kernel needs to handle padded weight matrices too. Let me check how the we
+  ight matrix B is accessed in the kernel:
+
+  Looking back at the code, in wvSplitK_hf_sml_:
+
+  • Line 430-432: const scalar_t* B_ = &B[(m + 0) * K + k_] and B_[y * K] - this
+    ssumes B has row stride K
+
+  For a padded weight matrix, we need to use the weight stride instead of K. Let
+  me add support for padded weight matrices too.
+
+  First, let me check how the weight tensor stride should be computed. The weigh
+  t has shape (M, K), so we need weight.stride(0).
+
+  Let me update the kernel to also handle padded weight:
+• Used ReadFile (vllm/csrc/rocm/skinny_gemms.cu)
+• I see that the kernel currently only takes strideA as a parameter. To support
+  padded weight matrices, I need to add strideB as well. This is more complex be
+  cause:
+
+  1. The kernel signature needs to accept strideB
+  2. All weight matrix accesses need to use strideB instead of K
+
+  But wait - looking at the test failures more carefully, the issue might be dif
+  ferent. Let me check what pad_b means in the test:
+• Used ReadFile (test_harness.py)
+• I see - pad_b creates a padded weight matrix B. The weight has shape (m, k), a
+  nd when padded, its stride(0) would be larger than k.
+
+  Looking at the kernel code, the weight matrix B is accessed at lines like:
+
+  • B[(m + 0) * K + k_]
+  • B_[y * K]
+
+  These assume the weight has row stride K. For padded weight, we need to use st
+  rideB instead.
+
+  This is a more significant change because:
+
+  1. We need to add strideB parameter to all kernel variants
+  2. Update all weight matrix accesses
+
+  However, looking at the task description again:
+
+  ▌ Some models (e.g., falcon-mamba-tiny-dev and others with non-power-of-2 hi
+  ▌ dden dimensions) produce padded tensors — tensors whose memory stride is l
+  ▌ arger than the logical dimension K.
+
+  The primary use case is padded activations (input tensors), not padded weights
+  . Weights are typically contiguous since they're loaded from checkpoint files.
+
+  But the test harness tests both cases. Let me check if supporting padded weigh
+  ts is in scope...
+
+  Looking at the Tier 1 tests, many cases with pad_b=True are failing. To get fu
+  ll score, we need to support padded weights too.
+
+  Let me add strideB support to the kernels. This requires:
+
+  1. Adding strideB parameter to kernel signatures
+  2. Updating weight matrix accesses to use strideB
+  3. Passing strideB from the dispatch function
+
+  Let me start with the dispatch function:
+• Used StrReplaceFile (vllm/csrc/rocm/skinny_gemms.cu)
+• Now I need to update the kernel signatures and the dispatch macros to pass str
+  ideB:
+• Used StrReplaceFile (vllm/csrc/rocm/skinny_gemms.cu)
+• Now I need to update the kernel signatures to accept strideB and use it for we
+  ight matrix accesses. Let me start with wvSplitK_hf_sml_:
+• Used StrReplaceFile (vllm/csrc/rocm/skinny_gemms.cu)
+• Now I need to update the weight matrix accesses in wvSplitK_hf_sml_ to use str
+  ideB. Let me find and update those:
+• Used StrReplaceFile (vllm/csrc/rocm/skinny_gemms.cu)
+• Now let me do the same for wvSplitK_hf_:
+• Used StrReplaceFile (vllm/csrc/rocm/skinny_gemms.cu)
+• Now update the weight accesses in wvSplitK_hf_:
+• Used StrReplaceFile (vllm/csrc/rocm/skinny_gemms.cu)
+• Now let me do the same for wvSplitK_hf_big_:
+• Used StrReplaceFile (vllm/csrc/rocm/skinny_gemms.cu)
+• Now update the weight accesses in wvSplitK_hf_big_:
+• Used StrReplaceFile (vllm/csrc/rocm/skinny_gemms.cu)
+• Now I also need to update the stub implementations for non-GFX9 architectures.
+  Let me find and update those:
+• Used StrReplaceFile (vllm/csrc/rocm/skinny_gemms.cu)
+•
+• Used StrReplaceFile (vllm/csrc/rocm/skinny_gemms.cu)
+•
+• Used StrReplaceFile (vllm/csrc/rocm/skinny_gemms.cu)
+• Now let me rebuild and test:
+• Used Shell (cd /workspace/vllm && exp...isolation 2>&1 | tail -30)
+  Killed by timeout (300s)
+• The build is taking time again. Let me run it in the background and wait:
+• Used Shell (cd /workspace/vllm && exp... tail -20 /tmp/build2.log)
+  Killed by timeout (30s)
+• The build has started. Let me wait for it to complete:
+• Used Shell (sleep 300 && tail -50 /tmp/build2.log | tail -30)
+  Killed by timeout (300s)
+•
+• Used Shell (tail -50 /tmp/build2.log | tail -30)
+• The build is still running. Let me wait more:

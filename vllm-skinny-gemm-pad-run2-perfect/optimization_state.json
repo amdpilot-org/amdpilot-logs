@@ -1,0 +1,65 @@
+{
+  "job_name": "vllm-skinny-gemm-pad",
+  "repo": "https://github.com/vllm-project/vllm.git",
+  "initial_baseline_ms": 100.0,
+  "current_best_ms": 100.0,
+  "stages_completed": [
+    {
+      "stage": "stage1_profile_and_diagnose",
+      "baseline_ms": null,
+      "current_best_ms": 100.0,
+      "applied_optimizations": [
+        {
+          "name": "Add stride support to wvSplitK kernel",
+          "impact_ms": -0.0,
+          "files_changed": [
+            "csrc/rocm/skinny_gemms.cu",
+            "vllm/model_executor/layers/utils.py"
+          ],
+          "description": "Modified wvSplitK_hf_sml_, wvSplitK_hf_, and wvSplitK_hf_big_ kernels to accept strideA and strideB parameters. Updated memory access patterns to use actual tensor strides instead of assuming stride == K. Removed is_contiguous() guard from utils.py to allow padded tensors to use optimized kernel path.",
+          "technique_category": "",
+          "timestamp": ""
+        }
+      ],
+      "attempted_but_failed": [],
+      "profiling_summary": {
+        "top_bottlenecks": [],
+        "gpu_utilization": 0.0,
+        "memory_usage_gb": 0.0,
+        "kernel_breakdown": {},
+        "raw_profile_path": "",
+        "timestamp": ""
+      },
+      "environment_changes": [
+        "pip install numpy",
+        "pip install psutil",
+        "pip install maturin"
+      ],
+      "notes": [],
+      "started_at": "2026-03-13T02:24:21.122244",
+      "completed_at": "2026-03-13T02:41:37.384190"
+    },
+    {
+      "stage": "stage2_implement_padding",
+      "baseline_ms": 100.0,
+      "current_best_ms": 100.0,
+      "applied_optimizations": [],
+      "attempted_but_failed": [],
+      "profiling_summary": {
+        "top_bottlenecks": [],
+        "gpu_utilization": 0.0,
+        "memory_usage_gb": 0.0,
+        "kernel_breakdown": {},
+        "raw_profile_path": "",
+        "timestamp": ""
+      },
+      "environment_changes": [],
+      "notes": [],
+      "started_at": "2026-03-13T02:46:03.556702",
+      "completed_at": "2026-03-13T02:56:43.472911"
+    }
+  ],
+  "current_stage": null,
+  "technique_attempts": {},
+  "global_notes": []
+}
