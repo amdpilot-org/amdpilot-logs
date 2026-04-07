@@ -1,11 +1,10 @@
 {
-  "total_examples": 145,
-  "new_curated_examples": 45,
-  "existing_examples": 100,
+  "total_examples": 45,
   "categories": {
     "bugfix": 34,
     "optimize": 3,
     "unknown": 7,
     "feature": 1
-  }
+  },
+  "source": "amdpilot-sft-curated pipeline"
 }
